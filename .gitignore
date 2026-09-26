@@ -1,0 +1,7 @@
+node_modules
+.next
+.env.local
+.env
+*.log
+.DS_Store
+client_secret_104117728977-1aufntoj3n25uvovg4nbtdjp0ekgbpra.apps.googleusercontent.com.json
