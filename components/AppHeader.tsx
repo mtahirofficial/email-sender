@@ -19,19 +19,31 @@ export default function AppHeader({
           <nav className="flex items-center gap-5 text-sm">
             <Link
               href="/"
-              className={active === "compose" ? "text-ink font-medium" : "text-ink-soft hover:text-ink"}
+              className={
+                active === "compose"
+                  ? "text-ink font-medium"
+                  : "text-ink-soft hover:text-ink"
+              }
             >
               Compose
             </Link>
             <Link
               href="/sent"
-              className={active === "sent" ? "text-ink font-medium" : "text-ink-soft hover:text-ink"}
+              className={
+                active === "sent"
+                  ? "text-ink font-medium"
+                  : "text-ink-soft hover:text-ink"
+              }
             >
-              Sent
+              Sent List
             </Link>
             <Link
               href="/email-test"
-              className={active === "email-test" ? "text-ink font-medium" : "text-ink-soft hover:text-ink"}
+              className={
+                active === "email-test"
+                  ? "text-ink font-medium"
+                  : "text-ink-soft hover:text-ink"
+              }
             >
               Tracking Test
             </Link>
