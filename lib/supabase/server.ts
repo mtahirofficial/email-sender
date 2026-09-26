@@ -1,4 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 /**
@@ -44,8 +45,7 @@ export function createClient() {
  * this client is handy for any future admin-only operations.
  */
 export function createAdminClient() {
-  const { createClient: createSupabaseClient } = require("@supabase/supabase-js");
-  return createSupabaseClient(
+  return createSupabaseJsClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
