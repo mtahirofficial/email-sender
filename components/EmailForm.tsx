@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 
@@ -13,6 +13,23 @@ type SendResult = {
   error?: string;
 };
 
+// Per-recipient subject rows: fixed row height so exactly 10 fit before scrolling.
+const ROW_HEIGHT_PX = 44;
+const MAX_VISIBLE_ROWS = 10;
+
+/** Splits the recipients field on commas, semicolons and new lines, without duplicates. */
+function parseRecipients(raw: string): string[] {
+  const parts = raw
+    .split(/[\n,;]/)
+    .map((r) => r.trim())
+    .filter(Boolean);
+  return Array.from(new Set(parts));
+}
+
+function looksLikeEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }) {
   const router = useRouter();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
@@ -22,21 +39,69 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<SendResult | null>(null);
 
+  // true  = one subject for everyone (the main Subject input)
+  // false = each recipient has their own subject row below the main input
+  const [sameSubject, setSameSubject] = useState(true);
+  const [perSubjects, setPerSubjects] = useState<Record<string, string>>({});
+
   const hasAccounts = accounts.length > 0;
-  const recipientCount = to
-    .split(/[\n,;]/)
-    .map((r) => r.trim())
-    .filter(Boolean).length;
+  const recipients = useMemo(() => parseRecipients(to), [to]);
+  const rowRecipients = useMemo(() => recipients.filter(looksLikeEmail), [recipients]);
+  const recipientCount = recipients.length;
+
+  function handleToChange(value: string) {
+    setTo(value);
+
+    // While in per-recipient mode, a newly added recipient starts with the
+    // main subject as it is right now. Existing rows are left untouched.
+    if (!sameSubject) {
+      const added = parseRecipients(value)
+        .filter(looksLikeEmail)
+        .filter((email) => !Object.prototype.hasOwnProperty.call(perSubjects, email));
+      if (added.length > 0) {
+        setPerSubjects((prev) => {
+          const next = { ...prev };
+          for (const email of added) {
+            if (!Object.prototype.hasOwnProperty.call(next, email)) next[email] = subject;
+          }
+          return next;
+        });
+      }
+    }
+  }
+
+  function toggleSameSubject() {
+    if (sameSubject) {
+      // Turning OFF: copy the main subject into every recipient's row once.
+      // Editing the main input afterwards does not touch the rows.
+      const filled: Record<string, string> = {};
+      for (const email of rowRecipients) filled[email] = subject;
+      setPerSubjects(filled);
+      setSameSubject(false);
+    } else {
+      setSameSubject(true);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setResult(null);
     setSending(true);
 
+    const payload = sameSubject
+      ? { accountId, to, subject, body: message }
+      : {
+          accountId,
+          to,
+          subject,
+          subjects: Object.fromEntries(recipients.map((r) => [r, perSubjects[r] ?? subject])),
+          body: message,
+        };
+
     const res = await fetch("/api/send-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId, to, subject, body: message }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
 
@@ -48,6 +113,7 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
       setTo("");
       setSubject("");
       setMessage("");
+      setPerSubjects({});
     }
   }
 
@@ -98,7 +164,7 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
               required
               rows={3}
               value={to}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={(e) => handleToChange(e.target.value)}
               placeholder="one@example.com, two@example.com&#10;or one per line"
               className="w-full border border-line px-3 py-2 text-sm text-ink bg-paper focus:bg-white resize-y"
             />
@@ -108,17 +174,76 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
           </div>
 
           <div>
-            <label htmlFor="subject" className="block text-sm text-ink-soft mb-1.5">
-              Subject
-            </label>
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <label htmlFor="subject" className="block text-sm text-ink-soft">
+                Subject
+              </label>
+              <div className="flex items-center gap-2">
+                <span id="same-subject-label" className="text-xs text-ink-soft">
+                  Same subject for all
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={sameSubject}
+                  aria-labelledby="same-subject-label"
+                  onClick={toggleSameSubject}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    sameSubject ? "bg-accent" : "bg-ink-soft/40"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                      sameSubject ? "translate-x-[18px]" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
             <input
               id="subject"
               type="text"
-              required
+              required={sameSubject}
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               className="w-full border border-line px-3 py-2 text-sm text-ink bg-paper focus:bg-white"
             />
+
+            {!sameSubject &&
+              (rowRecipients.length === 0 ? (
+                <p className="text-xs text-ink-soft mt-2">
+                  Add recipients above to set a separate subject for each one.
+                </p>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Subject for each recipient"
+                  className="mt-2 border border-line divide-y divide-line overflow-y-auto"
+                  style={{ maxHeight: ROW_HEIGHT_PX * MAX_VISIBLE_ROWS + 2 }}
+                >
+                  {rowRecipients.map((email) => (
+                    <div
+                      key={email}
+                      className="flex items-center gap-3 px-3"
+                      style={{ height: ROW_HEIGHT_PX }}
+                    >
+                      <span className="w-2/5 shrink-0 truncate text-xs text-ink-soft" title={email}>
+                        {email}
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        aria-label={`Subject for ${email}`}
+                        value={perSubjects[email] ?? subject}
+                        onChange={(e) =>
+                          setPerSubjects((prev) => ({ ...prev, [email]: e.target.value }))
+                        }
+                        className="flex-1 min-w-0 border border-line px-2 py-1.5 text-sm text-ink bg-paper focus:bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))}
           </div>
 
           <div>
