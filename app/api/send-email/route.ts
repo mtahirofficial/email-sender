@@ -18,6 +18,10 @@ function parseRecipients(raw: string): string[] {
   return Array.from(new Set(parts)); // de-duplicate
 }
 
+// Recipients are sent one after another, so large batches need more time
+// than the default serverless limit.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const supabase = createClient();
   const {
@@ -34,11 +38,26 @@ export async function POST(request: NextRequest) {
   const subject = (body?.subject as string | undefined)?.trim();
   const message = body?.body as string | undefined;
 
+  // Optional { "<recipient email>": "<subject>" } map. When present, a
+  // recipient listed in it gets that subject; everyone else gets `subject`.
+  const rawSubjects =
+    body?.subjects && typeof body.subjects === "object" && !Array.isArray(body.subjects)
+      ? (body.subjects as Record<string, unknown>)
+      : null;
+
+  function subjectFor(to: string): string {
+    if (rawSubjects && Object.prototype.hasOwnProperty.call(rawSubjects, to)) {
+      const specific = rawSubjects[to];
+      return typeof specific === "string" ? specific.trim() : "";
+    }
+    return subject ?? "";
+  }
+
   const recipients = Array.isArray(rawTo)
     ? rawTo.map((r) => r.trim()).filter(Boolean)
     : parseRecipients(rawTo ?? "");
 
-  if (!accountId || recipients.length === 0 || !subject || !message) {
+  if (!accountId || recipients.length === 0 || !message) {
     return NextResponse.json(
       { error: "accountId, at least one recipient, subject and body are all required." },
       { status: 400 }
@@ -52,9 +71,11 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (recipients.length > 50) {
+
+  const missingSubject = recipients.filter((r) => !subjectFor(r));
+  if (missingSubject.length > 0) {
     return NextResponse.json(
-      { error: "Please send to 50 or fewer recipients at a time." },
+      { error: `Every recipient needs a subject. Missing for: ${missingSubject.join(", ")}` },
       { status: 400 }
     );
   }
@@ -80,11 +101,12 @@ export async function POST(request: NextRequest) {
   const results: { to: string; ok: boolean; error?: string }[] = [];
 
   for (const to of recipients) {
+    const recipientSubject = subjectFor(to);
     try {
       if (provider === "google") {
-        await sendGmail(accessToken, { fromEmail, to, subject, body: message });
+        await sendGmail(accessToken, { fromEmail, to, subject: recipientSubject, body: message });
       } else {
-        await sendOutlookMail(accessToken, { to, subject, body: message });
+        await sendOutlookMail(accessToken, { to, subject: recipientSubject, body: message });
       }
 
       await logEmailAttempt(supabase, {
@@ -92,7 +114,7 @@ export async function POST(request: NextRequest) {
         accountId,
         fromEmail,
         toEmail: to,
-        subject,
+        subject: recipientSubject,
         status: "sent",
       });
 
@@ -106,7 +128,7 @@ export async function POST(request: NextRequest) {
         accountId,
         fromEmail,
         toEmail: to,
-        subject,
+        subject: recipientSubject,
         status: "failed",
         error: errorMessage.slice(0, 500),
       });
