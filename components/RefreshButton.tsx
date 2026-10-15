@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { RefreshIcon } from "@/components/icons";
 
 export default function RefreshButton() {
   const router = useRouter();
@@ -10,15 +11,12 @@ export default function RefreshButton() {
   function handleClick() {
     setRefreshing(true);
     router.refresh();
-    setTimeout(() => setRefreshing(false), 400);
+    setTimeout(() => setRefreshing(false), 600);
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="text-sm text-ink-soft underline underline-offset-2 hover:text-ink"
-    >
+    <button type="button" onClick={handleClick} className="btn-secondary" aria-live="polite">
+      <RefreshIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
       {refreshing ? "Refreshing…" : "Refresh results"}
     </button>
   );

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -6,6 +7,12 @@ import ConnectAccounts from "@/components/ConnectAccounts";
 import EmailForm from "@/components/EmailForm";
 import AlertBanner from "@/components/AlertBanner";
 import AppHeader from "@/components/AppHeader";
+
+// Signed-in screen only. Signed-out visitors are served the public landing page instead.
+export const metadata: Metadata = {
+  title: "Compose",
+  robots: { index: false, follow: false },
+};
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -20,19 +27,22 @@ export default async function DashboardPage() {
   const accounts = await listConnectedAccounts(supabase, user.id);
 
   return (
-    <main className="min-h-screen">
+    <>
       <AppHeader userEmail={user.email ?? ""} active="compose" />
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
+      <main id="main" className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+        <h1 className="sr-only">Compose email</h1>
         <Suspense fallback={null}>
           <AlertBanner />
         </Suspense>
 
-        <div className="grid md:grid-cols-[280px_1fr] gap-10">
-          <ConnectAccounts accounts={accounts} />
+        <div className="grid gap-8 md:grid-cols-[300px_1fr] md:items-start">
+          <div className="md:sticky md:top-24">
+            <ConnectAccounts accounts={accounts} />
+          </div>
           <EmailForm accounts={accounts} />
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

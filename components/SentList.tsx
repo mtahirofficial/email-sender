@@ -1,57 +1,67 @@
 import type { EmailLog } from "@/lib/email-logs";
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
+import LocalTime from "@/components/LocalTime";
+import { CheckIcon, InboxIcon, XIcon } from "@/components/icons";
 
 export default function SentList({ logs }: { logs: EmailLog[] }) {
+  const failed = logs.filter((l) => l.status === "failed").length;
+  const sent = logs.length - failed;
+
   return (
     <section aria-labelledby="sent-heading">
-      <h2 id="sent-heading" className="font-serif text-lg text-ink mb-1">
-        Sent
-      </h2>
-      <p className="text-sm text-ink-soft mb-4">
-        Your last {logs.length > 0 ? logs.length : ""} send attempts from this
-        app, most recent first.
-      </p>
-
-      <div className="border border-line bg-white divide-y divide-line">
-        {logs.length === 0 && (
-          <p className="px-4 py-4 text-sm text-ink-soft">
-            Nothing sent yet — messages you send will show up here.
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 id="sent-heading" className="font-serif text-3xl text-ink">
+            Sent
+          </h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Your latest {logs.length > 0 ? logs.length : ""} send attempts from this app, most recent first.
           </p>
+        </div>
+        {logs.length > 0 && (
+          <div className="flex gap-2">
+            <span className="pill border-accent/20 bg-accent-soft text-accent-deep">{sent} sent</span>
+            {failed > 0 && <span className="pill border-red-200 bg-red-50 text-red-700">{failed} failed</span>}
+          </div>
         )}
-        {logs.map((log) => (
-          <div key={log.id} className="px-4 py-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm text-ink truncate">{log.subject}</p>
-                <p className="text-xs text-ink-soft mt-0.5 truncate">
-                  {log.from_email} → {log.to_email}
-                </p>
-                {log.status === "failed" && log.error && (
-                  <p className="text-xs text-red-700 mt-1">{log.error}</p>
-                )}
-              </div>
-              <div className="shrink-0 text-right">
+      </div>
+
+      {logs.length === 0 ? (
+        <div className="card px-6 py-14 text-center">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-mist text-ink-soft">
+            <InboxIcon className="h-6 w-6" />
+          </span>
+          <p className="mt-4 font-serif text-xl text-ink">Nothing sent yet</p>
+          <p className="mt-1 text-sm text-ink-soft">Messages you send will show up here.</p>
+        </div>
+      ) : (
+        <ul className="card divide-y divide-line overflow-hidden">
+          {logs.map((log) => {
+            const ok = log.status === "sent";
+            return (
+              <li key={log.id} className="flex items-start gap-3 px-4 py-4 sm:px-5">
                 <span
-                  className={`text-[11px] px-1.5 py-0.5 border ${
-                    log.status === "sent"
-                      ? "border-accent text-accent-deep"
-                      : "border-red-300 text-red-700"
+                  className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+                    ok ? "bg-accent-soft text-accent-deep" : "bg-red-50 text-red-700"
                   }`}
                 >
-                  {log.status === "sent" ? "Sent" : "Failed"}
+                  {ok ? <CheckIcon className="h-4 w-4" /> : <XIcon className="h-4 w-4" />}
+                  <span className="sr-only">{ok ? "Sent" : "Failed"}</span>
                 </span>
-                <p className="text-xs text-ink-soft mt-1">{formatTime(log.sent_at)}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-ink">{log.subject}</p>
+                  <p className="mt-0.5 truncate text-xs text-ink-soft">
+                    {log.from_email} &rarr; {log.to_email}
+                  </p>
+                  {!ok && log.error && <p className="mt-1 break-words text-xs text-red-700">{log.error}</p>}
+                </div>
+                <p className="shrink-0 text-right text-xs text-ink-soft">
+                  <LocalTime iso={log.sent_at} />
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }

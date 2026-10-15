@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { AlertIcon, CheckIcon, XIcon } from "@/components/icons";
 
 export default function AlertBanner() {
   const searchParams = useSearchParams();
@@ -27,20 +28,22 @@ export default function AlertBanner() {
 
   return (
     <div
-      className={`mb-8 flex items-start justify-between gap-4 border px-4 py-3 text-sm ${
+      role={error ? "alert" : "status"}
+      className={`mb-8 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
         error
           ? "border-red-200 bg-red-50 text-red-800"
-          : "border-accent-soft bg-accent-soft text-accent-deep"
+          : "border-accent/20 bg-accent-soft text-accent-deep"
       }`}
-      role="status"
     >
-      <span>{message}</span>
+      {error ? <AlertIcon className="mt-0.5 h-5 w-5 shrink-0" /> : <CheckIcon className="mt-0.5 h-5 w-5 shrink-0" />}
+      <p className="flex-1 leading-relaxed">{message}</p>
       <button
         type="button"
         onClick={dismiss}
-        className="shrink-0 text-xs underline underline-offset-2"
+        aria-label="Dismiss message"
+        className="-mr-2 -mt-1.5 grid h-11 w-11 shrink-0 place-items-center rounded-lg hover:bg-black/5"
       >
-        Dismiss
+        <XIcon className="h-4 w-4" />
       </button>
     </div>
   );

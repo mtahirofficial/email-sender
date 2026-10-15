@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PlusIcon, SpinnerIcon } from "@/components/icons";
 
 export default function EmailTestNewForm() {
   const router = useRouter();
@@ -33,10 +34,10 @@ export default function EmailTestNewForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="border border-line bg-white p-4 flex flex-col gap-3">
+    <form onSubmit={handleSubmit} className="card flex flex-col gap-3 p-4">
       <div>
-        <label htmlFor="label" className="block text-sm text-ink-soft mb-1.5">
-          Label (optional)
+        <label htmlFor="label" className="label">
+          Label <span className="font-normal text-ink-soft">(optional)</span>
         </label>
         <input
           id="label"
@@ -44,15 +45,16 @@ export default function EmailTestNewForm() {
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="e.g. Gmail web attempt"
-          className="w-full border border-line px-3 py-2 text-sm text-ink bg-paper focus:bg-white"
+          className="input"
         />
       </div>
-      {error && <p className="text-sm text-red-700">{error}</p>}
-      <button
-        type="submit"
-        disabled={creating}
-        className="self-start bg-accent text-white text-sm px-4 py-2 hover:bg-accent-deep transition-colors disabled:opacity-60"
-      >
+      {error && (
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      <button type="submit" disabled={creating} className="btn-primary">
+        {creating ? <SpinnerIcon /> : <PlusIcon className="h-4 w-4" />}
         {creating ? "Creating…" : "New test"}
       </button>
     </form>

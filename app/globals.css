@@ -6,9 +6,16 @@
   color-scheme: light;
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background-color: #FAFAF7;
   color: #16233A;
+  background-image: radial-gradient(900px 320px at 50% -120px, rgba(46, 93, 80, 0.1), transparent 70%);
+  background-repeat: no-repeat;
 }
 
 ::selection {
@@ -23,9 +30,57 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-white shadow-card;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm text-ink transition-colors placeholder:text-ink-soft/60 focus:border-accent focus:bg-white;
+  }
+
+  .input-sm {
+    @apply w-full rounded-md border border-line bg-paper px-2.5 py-1.5 text-sm text-ink transition-colors focus:border-accent focus:bg-white;
+  }
+
+  .btn-primary {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-secondary {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent-deep disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-ghost {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-soft transition-colors hover:bg-mist hover:text-ink disabled:opacity-60;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  /* Airmail-envelope stripe, used as a quiet brand motif. */
+  .airmail {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      #2E5D50 0 12px,
+      #FAFAF7 12px 20px,
+      #C9922E 20px 32px,
+      #FAFAF7 32px 40px
+    );
   }
 }

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +9,12 @@ import EmailTestNewForm from "@/components/EmailTestNewForm";
 import EmailTestSendForm from "@/components/EmailTestSendForm";
 import EmailTestResults from "@/components/EmailTestResults";
 import RefreshButton from "@/components/RefreshButton";
+import LocalTime from "@/components/LocalTime";
+
+export const metadata: Metadata = {
+  title: "HTML tracking element test",
+  robots: { index: false, follow: false },
+};
 
 export default async function EmailTestPage({
   searchParams,
@@ -35,76 +42,84 @@ export default async function EmailTestPage({
   const results = selectedTest ? await getTrackingResults(supabase, selectedTest.id) : null;
 
   return (
-    <main className="min-h-screen">
+    <>
       <AppHeader userEmail={user.email ?? ""} active="email-test" />
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        <h1 className="font-serif text-xl text-ink mb-1">HTML Tracking Element Test</h1>
-        <p className="text-sm text-ink-soft mb-8 max-w-2xl">
-          Experimentally determine which HTML elements/resources cause a
-          request when this email is opened in a real mail client. Every test
-          uses cryptographically random, unguessable per-element URLs — no
-          JavaScript is used to trigger tracking.
+      <main id="main" className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+        <h1 className="font-serif text-3xl text-ink">HTML tracking element test</h1>
+        <p className="mb-8 mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">
+          Find out which HTML elements and resources cause a request when this email is opened in a real mail
+          client. Every test uses random, unguessable per-element URLs, and no JavaScript is used to trigger
+          tracking.
         </p>
 
-        <div className="grid md:grid-cols-[280px_1fr] gap-10">
+        <div className="grid gap-8 md:grid-cols-[300px_1fr] md:items-start">
           <div className="space-y-6">
-            <section>
-              <h2 className="font-serif text-lg text-ink mb-2">New test</h2>
+            <section aria-labelledby="new-test-heading">
+              <h2 id="new-test-heading" className="mb-2 font-serif text-lg text-ink">
+                New test
+              </h2>
               <EmailTestNewForm />
             </section>
 
-            <section>
-              <h2 className="font-serif text-lg text-ink mb-2">Your tests</h2>
-              <div className="border border-line bg-white divide-y divide-line">
-                {tests.length === 0 && (
-                  <p className="px-4 py-4 text-sm text-ink-soft">No tests yet.</p>
-                )}
-                {tests.map((t) => (
-                  <Link
-                    key={t.id}
-                    href={`/email-test?test=${t.public_test_id}`}
-                    className={`block px-4 py-2.5 text-sm ${
-                      t.public_test_id === selectedPublicId
-                        ? "bg-accent-soft text-accent-deep"
-                        : "text-ink hover:bg-paper"
-                    }`}
-                  >
-                    <p className="truncate">{t.label || t.public_test_id}</p>
-                    <p className="text-xs text-ink-soft">
-                      {new Date(t.created_at).toLocaleDateString()}
-                    </p>
-                  </Link>
-                ))}
-              </div>
+            <section aria-labelledby="tests-heading">
+              <h2 id="tests-heading" className="mb-2 font-serif text-lg text-ink">
+                Your tests
+              </h2>
+              {tests.length === 0 ? (
+                <p className="card px-4 py-5 text-sm text-ink-soft">No tests yet.</p>
+              ) : (
+                <ul className="card divide-y divide-line overflow-hidden">
+                  {tests.map((t) => {
+                    const isSelected = t.public_test_id === selectedPublicId;
+                    return (
+                      <li key={t.id}>
+                        <Link
+                          href={`/email-test?test=${t.public_test_id}`}
+                          aria-current={isSelected ? "true" : undefined}
+                          className={`block min-h-[44px] px-4 py-2.5 text-sm transition-colors ${
+                            isSelected ? "bg-accent-soft text-accent-deep" : "text-ink hover:bg-mist"
+                          }`}
+                        >
+                          <span className="block truncate">{t.label || t.public_test_id}</span>
+                          <span className="block text-xs text-ink-soft">
+                            <LocalTime iso={t.created_at} dateOnly />
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </section>
           </div>
 
           <div className="space-y-8">
             {!selectedTest ? (
-              <div className="border border-line bg-white px-4 py-6 text-sm text-ink-soft">
+              <div className="card px-6 py-12 text-center text-sm text-ink-soft">
                 Create a test to get started.
               </div>
             ) : (
               <>
-                <section>
-                  <h2 className="font-serif text-lg text-ink mb-1">
+                <section aria-labelledby="selected-heading" className="card p-5">
+                  <h2 id="selected-heading" className="font-serif text-xl text-ink">
                     {selectedTest.label || "Test"}{" "}
-                    <span className="text-ink-soft text-sm font-sans font-normal">
+                    <span className="font-sans text-sm font-normal text-ink-soft">
                       ({selectedTest.public_test_id})
                     </span>
                   </h2>
-                  <p className="text-sm text-ink-soft mb-3">
-                    Send this same test to yourself in different mail clients
-                    (Gmail web, Gmail mobile, Outlook web/desktop, Yahoo Mail,
-                    Apple Mail...) — every open reports back to this one test ID.
+                  <p className="mb-4 mt-1 text-sm leading-relaxed text-ink-soft">
+                    Send this same test to yourself in different mail clients (Gmail web and mobile, Outlook,
+                    Yahoo Mail, Apple Mail). Every open reports back to this one test ID.
                   </p>
                   <EmailTestSendForm testId={selectedTest.public_test_id} accounts={accounts} />
                 </section>
 
-                <section>
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="font-serif text-lg text-ink">Results</h2>
+                <section aria-labelledby="results-heading">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 id="results-heading" className="font-serif text-xl text-ink">
+                      Results
+                    </h2>
                     <RefreshButton />
                   </div>
                   {results && <EmailTestResults summary={results.summary} events={results.events} />}
@@ -113,7 +128,7 @@ export default async function EmailTestPage({
             )}
           </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

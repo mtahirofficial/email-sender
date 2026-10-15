@@ -182,3 +182,26 @@ installs). No new environment variables are needed — it reuses
   correctly-typed minimal response (so nothing looks visibly broken) but is
   **not** recorded, to keep results honest.
 
+
+## SEO, performance and public pages
+
+- **Public landing page.** Signed-out visitors (and search crawlers) get a
+  static, fast landing page at `/` (served from `/welcome` via a middleware
+  rewrite, so the URL stays `/`). Signed-in users still land on the dashboard.
+- **Legal pages.** `/privacy` and `/terms` ship with production-ready
+  copy that matches what the app really does. Have a lawyer review them for
+  your jurisdiction, and set `NEXT_PUBLIC_CONTACT_EMAIL` so a contact address
+  appears. Google's OAuth verification asks for a homepage and privacy policy.
+- **Technical SEO.** Per-page title and meta description, Open Graph and
+  Twitter cards, canonical URLs, generated social image
+  (`/opengraph-image`), `robots.txt`, `sitemap.xml`, web manifest, SVG icon,
+  and JSON-LD (WebSite, SoftwareApplication, FAQPage) on the landing page.
+  Signed-in screens are `noindex`.
+- **After deploying**, submit `https://YOUR-DOMAIN/sitemap.xml` in Google
+  Search Console and run the landing page through PageSpeed Insights.
+- **Performance.** Landing, privacy and terms pages are static with no client
+  JavaScript, fonts are self-hosted via `next/font` with two serif weights,
+  there are no images to download, and the middleware skips the Supabase call
+  for signed-out visitors and for tracking-pixel requests.
+- **Accessibility.** Skip link, visible focus, 44px tap targets, WCAG AA
+  colour contrast, labelled form controls and live regions for form feedback.

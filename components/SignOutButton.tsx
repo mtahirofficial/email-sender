@@ -14,11 +14,7 @@ export default function SignOutButton() {
   }
 
   return (
-    <button
-      type="button"
-      onClick={signOut}
-      className="text-sm text-ink-soft hover:text-ink underline underline-offset-2"
-    >
+    <button type="button" onClick={signOut} className="btn-ghost">
       Sign out
     </button>
   );

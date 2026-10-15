@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
+import { AlertIcon, CheckIcon, SendIcon, SpinnerIcon } from "@/components/icons";
 
 export default function EmailTestSendForm({
   testId,
@@ -49,38 +50,50 @@ export default function EmailTestSendForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 items-start">
-      <select
-        value={accountId}
-        onChange={(e) => setAccountId(e.target.value)}
-        className="border border-line px-3 py-2 text-sm text-ink bg-paper focus:bg-white"
-      >
-        {accounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            {account.email} ({account.provider === "google" ? "Gmail" : "Outlook"})
-          </option>
-        ))}
-      </select>
-      <input
-        type="email"
-        required
-        value={to}
-        onChange={(e) => setTo(e.target.value)}
-        placeholder="recipient to test with"
-        className="flex-1 min-w-[220px] border border-line px-3 py-2 text-sm text-ink bg-paper focus:bg-white"
-      />
-      <button
-        type="submit"
-        disabled={sending}
-        className="bg-accent text-white text-sm px-4 py-2 hover:bg-accent-deep transition-colors disabled:opacity-60 whitespace-nowrap"
-      >
-        {sending ? "Sending…" : "Send this test"}
-      </button>
-      {result && (
-        <p className={`text-sm ${result.type === "error" ? "text-red-700" : "text-accent-deep"}`}>
-          {result.text}
-        </p>
-      )}
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <select
+          aria-label="Send from"
+          value={accountId}
+          onChange={(e) => setAccountId(e.target.value)}
+          className="input sm:max-w-[260px]"
+        >
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.email} ({account.provider === "google" ? "Gmail" : "Outlook"})
+            </option>
+          ))}
+        </select>
+        <input
+          type="email"
+          required
+          aria-label="Recipient to test with"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          placeholder="Recipient to test with"
+          className="input flex-1"
+        />
+        <button type="submit" disabled={sending} className="btn-primary whitespace-nowrap">
+          {sending ? <SpinnerIcon /> : <SendIcon className="h-4 w-4" />}
+          {sending ? "Sending…" : "Send this test"}
+        </button>
+      </div>
+      <div aria-live="polite">
+        {result && (
+          <p
+            className={`flex items-start gap-2 text-sm ${
+              result.type === "error" ? "text-red-700" : "text-accent-deep"
+            }`}
+          >
+            {result.type === "error" ? (
+              <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <CheckIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+            {result.text}
+          </p>
+        )}
+      </div>
     </form>
   );
 }
