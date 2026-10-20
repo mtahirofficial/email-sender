@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listConnectedAccounts } from "@/lib/accounts";
+import { isAdminUser } from "@/lib/admin";
 import { listTrackingTests, getOwnedTrackingTest, getTrackingResults } from "@/lib/email-test/store";
-import AppHeader from "@/components/AppHeader";
+import SiteHeader from "@/components/SiteHeader";
+import SiteFooter from "@/components/marketing/SiteFooter";
+import { toHeaderUser } from "@/lib/header-user";
 import EmailTestNewForm from "@/components/EmailTestNewForm";
 import EmailTestSendForm from "@/components/EmailTestSendForm";
 import EmailTestResults from "@/components/EmailTestResults";
@@ -30,6 +33,11 @@ export default async function EmailTestPage({
     redirect("/login");
   }
 
+  // Admin-only tool: everyone else gets a plain 404, so it does not even look like it exists.
+  if (!isAdminUser(user)) {
+    notFound();
+  }
+
   const [accounts, tests] = await Promise.all([
     listConnectedAccounts(supabase, user.id),
     listTrackingTests(supabase, user.id),
@@ -43,9 +51,9 @@ export default async function EmailTestPage({
 
   return (
     <>
-      <AppHeader userEmail={user.email ?? ""} active="email-test" />
+      <SiteHeader initialUser={toHeaderUser(user)} />
 
-      <main id="main" className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+      <main id="main" className="mx-auto w-full flex-1 max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="font-serif text-3xl text-ink">HTML tracking element test</h1>
         <p className="mb-8 mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">
           Find out which HTML elements and resources cause a request when this email is opened in a real mail
@@ -129,6 +137,7 @@ export default async function EmailTestPage({
           </div>
         </div>
       </main>
+      <SiteFooter />
     </>
   );
 }

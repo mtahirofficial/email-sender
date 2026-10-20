@@ -13,13 +13,13 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent("Google connection was cancelled.")}`, appUrl)
+      new URL(`/compose?error=${encodeURIComponent("Google connection was cancelled.")}`, appUrl)
     );
   }
 
   if (!code || !state || !expectedState || state !== expectedState) {
     return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent("Invalid or expired connection request.")}`, appUrl)
+      new URL(`/compose?error=${encodeURIComponent("Invalid or expired connection request.")}`, appUrl)
     );
   }
 
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       // revoking access — Google only issues a refresh_token on first consent.
       return NextResponse.redirect(
         new URL(
-          `/?error=${encodeURIComponent(
+          `/compose?error=${encodeURIComponent(
             "Google didn't return a refresh token. Remove this app's access at https://myaccount.google.com/permissions and try connecting again."
           )}`,
           appUrl
@@ -58,13 +58,13 @@ export async function GET(request: NextRequest) {
       expiresInSeconds: tokens.expires_in,
     });
 
-    const response = NextResponse.redirect(new URL("/?connected=google", appUrl));
+    const response = NextResponse.redirect(new URL("/compose?connected=google", appUrl));
     response.cookies.delete("google_oauth_state");
     return response;
   } catch (err) {
     console.error(err);
     return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent("Could not connect this Gmail account.")}`, appUrl)
+      new URL(`/compose?error=${encodeURIComponent("Could not connect this Gmail account.")}`, appUrl)
     );
   }
 }

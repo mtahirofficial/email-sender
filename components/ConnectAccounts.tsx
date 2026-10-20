@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import { MailIcon, PlusIcon, ShieldIcon, UsersIcon } from "@/components/icons";
 
-export default function ConnectAccounts({ accounts }: { accounts: ConnectedAccount[] }) {
+export default function ConnectAccounts({
+  accounts,
+  microsoftEnabled,
+}: {
+  accounts: ConnectedAccount[];
+  /** False until MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET are configured. */
+  microsoftEnabled: boolean;
+}) {
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
 
@@ -83,9 +90,16 @@ export default function ConnectAccounts({ accounts }: { accounts: ConnectedAccou
         <a href="/oauth/google" className="btn-secondary">
           <PlusIcon className="h-4 w-4" /> Connect Gmail
         </a>
-        <a href="/oauth/microsoft" className="btn-secondary">
-          <PlusIcon className="h-4 w-4" /> Connect Outlook
-        </a>
+        {microsoftEnabled ? (
+          <a href="/oauth/microsoft" className="btn-secondary">
+            <PlusIcon className="h-4 w-4" /> Connect Outlook
+          </a>
+        ) : (
+          <button type="button" disabled className="btn-secondary">
+            <PlusIcon className="h-4 w-4" /> Connect Outlook
+            <span className="pill border-line bg-mist text-ink-soft">Coming soon</span>
+          </button>
+        )}
       </div>
 
       <p className="mt-4 flex gap-2 text-xs leading-relaxed text-ink-soft">

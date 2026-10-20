@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminUser } from "@/lib/admin";
 import { getValidAccessToken } from "@/lib/accounts";
 import { sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
@@ -19,6 +20,9 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+  if (!isAdminUser(user)) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
   const body = await request.json().catch(() => null);

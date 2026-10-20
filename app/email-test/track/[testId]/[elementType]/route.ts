@@ -25,6 +25,7 @@ const NO_CACHE_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
   Pragma: "no-cache",
   Expires: "0",
+  "X-Robots-Tag": "noindex, nofollow",
 };
 
 function getClientIp(request: NextRequest): string | null {

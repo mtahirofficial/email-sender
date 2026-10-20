@@ -139,7 +139,11 @@ connect Gmail and/or Outlook, and send a test email to yourself.
   stored refresh token becomes unreadable and every connected account must
   be reconnected.
 
-## HTML Tracking Element Test module
+## HTML Tracking Element Test module (admin only)
+
+This tool is restricted to the account in `ADMIN_EMAIL`. It is checked on the
+server (page and API routes return 404 for everyone else) and is not linked
+or described anywhere in the public site.
 
 ### Setup
 Run [`supabase/migrations_add_email_tracking_test.sql`](./supabase/migrations_add_email_tracking_test.sql)

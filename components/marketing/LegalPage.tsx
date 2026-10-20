@@ -1,20 +1,12 @@
 import type { ReactNode } from "react";
-import SiteHeader from "@/components/marketing/SiteHeader";
+import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 
-export default function LegalPage({
-  title,
-  updated,
-  children,
-}: {
-  title: string;
-  updated: string;
-  children: ReactNode;
-}) {
+export default function LegalPage({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
   return (
     <>
       <SiteHeader />
-      <main id="main" className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
+      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-12 sm:px-6 sm:py-16">
         <h1 className="font-serif text-4xl text-ink">{title}</h1>
         <p className="mt-2 text-sm text-ink-soft">Last updated: {updated}</p>
         <div

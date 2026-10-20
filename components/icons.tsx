@@ -119,3 +119,26 @@ export function Logo({ className = "h-8 w-8" }: IconProps) {
     </svg>
   );
 }
+
+export const PenIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4" />
+  </Svg>
+);
+
+export const ChevronDownIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <path d="m6 9 6 6 6-6" />
+  </Svg>
+);
+export const SettingsIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" />
+  </Svg>
+);
+export const LogOutIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+  </Svg>
+);

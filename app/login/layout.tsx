@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { getOptionalUser } from "@/lib/auth";
 
 // Crawlable (so Google can read this tag) but kept out of search results.
 export const metadata: Metadata = {
@@ -7,6 +9,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 };
 
-export default function LoginLayout({ children }: { children: React.ReactNode }) {
+export default async function LoginLayout({ children }: { children: React.ReactNode }) {
+  // Already signed in? Nothing to do here, go to Compose.
+  const user = await getOptionalUser();
+  if (user) redirect("/compose");
+
   return children;
 }

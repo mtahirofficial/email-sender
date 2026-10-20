@@ -19,12 +19,14 @@ create index if not exists email_logs_user_id_sent_at_idx
   on public.email_logs (user_id, sent_at desc);
 
 -- A user can only ever see their own sent/failed history.
+drop policy if exists "email_logs_select_own" on public.email_logs;
 create policy "email_logs_select_own"
   on public.email_logs for select
   using (auth.uid() = user_id);
 
 -- Inserts happen from the server using the signed-in user's own session,
 -- so this mirrors the same "only your own rows" rule.
+drop policy if exists "email_logs_insert_own" on public.email_logs;
 create policy "email_logs_insert_own"
   on public.email_logs for insert
   with check (auth.uid() = user_id);

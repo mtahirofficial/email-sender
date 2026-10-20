@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/marketing/LegalPage";
+import JsonLd from "@/components/JsonLd";
+import { breadcrumbNode, graph, organizationNode, webPageNode, websiteNode } from "@/lib/jsonld";
 import { CONTACT_EMAIL, LEGAL_UPDATED, OG_IMAGE, SITE_NAME } from "@/lib/site";
 
 const description =
@@ -15,6 +17,18 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
+    <>
+    <JsonLd
+      data={graph(
+        organizationNode(),
+        websiteNode(),
+        webPageNode({ path: "/privacy", name: "Privacy Policy", description }),
+        breadcrumbNode([
+          { name: "Home", path: "/" },
+          { name: "Privacy Policy", path: "/privacy" },
+        ])
+      )}
+    />
     <LegalPage title="Privacy Policy" updated={LEGAL_UPDATED}>
       <p>
         {SITE_NAME} lets you send email from your own Gmail or Outlook account. This policy explains what
@@ -29,6 +43,14 @@ export default function PrivacyPage() {
           Passwords are handled by our authentication provider and are stored only as salted hashes.
         </li>
         <li>
+          <strong>Profile details.</strong> Your name and profile photo, if you choose to add them. They are shown
+          in your account menu.
+        </li>
+        <li>
+          <strong>Contact messages.</strong> If you write to us through the contact form, the name, email address
+          and message you send.
+        </li>
+        <li>
           <strong>Connected mailbox details.</strong> When you connect Gmail or Outlook we store the address of
           that mailbox and the OAuth access and refresh tokens needed to send mail for you. Tokens are encrypted
           before they are stored.
@@ -36,11 +58,6 @@ export default function PrivacyPage() {
         <li>
           <strong>Send history.</strong> For each message you send we keep the sender address, recipient address,
           subject, time and whether it succeeded. <strong>We do not store the body of your messages.</strong>
-        </li>
-        <li>
-          <strong>Diagnostic tracking test (optional tool).</strong> If you use the HTML tracking test, we record
-          each request your own test email triggers: the time, request headers such as the user agent, and the IP
-          address of the requesting server or device.
         </li>
       </ul>
 
@@ -78,8 +95,7 @@ export default function PrivacyPage() {
       <h2>Retention and deletion</h2>
       <p>
         You can disconnect a mailbox at any time from the dashboard, which deletes its stored tokens. You can also
-        revoke access from your Google or Microsoft account&rsquo;s app permissions page. Send history and account
-        data are kept until you ask us to delete them or you delete your account.
+        revoke access from your Google or Microsoft account&rsquo;s app permissions page. You can delete your account at any time in Settings, which permanently removes your account, connected mailboxes, send history and profile photo. Contact messages are kept only as long as needed to reply.
       </p>
 
       <h2>Security</h2>
@@ -114,5 +130,6 @@ export default function PrivacyPage() {
         </>
       )}
     </LegalPage>
+    </>
   );
 }

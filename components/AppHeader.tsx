@@ -1,19 +1,20 @@
 import Link from "next/link";
 import SignOutButton from "@/components/SignOutButton";
-import { FlaskIcon, InboxIcon, Logo, SendIcon } from "@/components/icons";
+import { FlaskIcon, InboxIcon, Logo, PenIcon, SendIcon } from "@/components/icons";
 
-type ActiveTab = "compose" | "sent" | "email-test";
+type ActiveTab = "compose" | "sent" | "email-test" | "blog-admin";
 
 const NAV = [
   { id: "compose", href: "/", label: "Compose", Icon: SendIcon },
   { id: "sent", href: "/sent", label: "Sent", Icon: InboxIcon },
   { id: "email-test", href: "/email-test", label: "Tracking test", Icon: FlaskIcon },
+  { id: "blog-admin", href: "/admin/blog", label: "Blog manager", Icon: PenIcon },
 ] as const;
 
-function NavLinks({ active }: { active: ActiveTab }) {
+function NavLinks({ active, isAdmin }: { active?: ActiveTab; isAdmin: boolean }) {
   return (
     <>
-      {NAV.map(({ id, href, label, Icon }) => {
+      {NAV.filter((item) => (item.id !== "email-test" && item.id !== "blog-admin") || isAdmin).map(({ id, href, label, Icon }) => {
         const isActive = id === active;
         return (
           <Link
@@ -38,9 +39,11 @@ function NavLinks({ active }: { active: ActiveTab }) {
 export default function AppHeader({
   userEmail,
   active,
+  isAdmin = false,
 }: {
   userEmail: string;
-  active: ActiveTab;
+  active?: ActiveTab;
+  isAdmin?: boolean;
 }) {
   const initial = (userEmail[0] ?? "?").toUpperCase();
 
@@ -54,7 +57,7 @@ export default function AppHeader({
               <span className="font-serif text-xl text-ink">Outbox</span>
             </Link>
             <nav aria-label="Main" className="hidden items-center gap-1 sm:flex">
-              <NavLinks active={active} />
+              <NavLinks active={active} isAdmin={isAdmin} />
             </nav>
           </div>
 
@@ -73,7 +76,7 @@ export default function AppHeader({
         </div>
 
         <nav aria-label="Main (mobile)" className="flex items-center gap-1 overflow-x-auto pb-2 sm:hidden">
-          <NavLinks active={active} />
+          <NavLinks active={active} isAdmin={isAdmin} />
         </nav>
       </div>
     </header>

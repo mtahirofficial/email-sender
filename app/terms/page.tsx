@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/marketing/LegalPage";
+import JsonLd from "@/components/JsonLd";
+import { breadcrumbNode, graph, organizationNode, webPageNode, websiteNode } from "@/lib/jsonld";
 import { CONTACT_EMAIL, LEGAL_UPDATED, OG_IMAGE, SITE_NAME } from "@/lib/site";
 
 const description =
@@ -15,6 +17,18 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
+    <>
+    <JsonLd
+      data={graph(
+        organizationNode(),
+        websiteNode(),
+        webPageNode({ path: "/terms", name: "Terms of Service", description }),
+        breadcrumbNode([
+          { name: "Home", path: "/" },
+          { name: "Terms of Service", path: "/terms" },
+        ])
+      )}
+    />
     <LegalPage title="Terms of Service" updated={LEGAL_UPDATED}>
       <p>
         By creating an account or using {SITE_NAME} you agree to these terms. If you do not agree, please do not
@@ -85,5 +99,6 @@ export default function TermsPage() {
         </>
       )}
     </LegalPage>
+    </>
   );
 }

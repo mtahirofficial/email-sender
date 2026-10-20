@@ -19,14 +19,17 @@ create table if not exists public.email_tracking_tests (
 
 alter table public.email_tracking_tests enable row level security;
 
+drop policy if exists "email_tracking_tests_select_own" on public.email_tracking_tests;
 create policy "email_tracking_tests_select_own"
   on public.email_tracking_tests for select
   using (auth.uid() = user_id);
 
+drop policy if exists "email_tracking_tests_insert_own" on public.email_tracking_tests;
 create policy "email_tracking_tests_insert_own"
   on public.email_tracking_tests for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "email_tracking_tests_delete_own" on public.email_tracking_tests;
 create policy "email_tracking_tests_delete_own"
   on public.email_tracking_tests for delete
   using (auth.uid() = user_id);
@@ -55,6 +58,7 @@ alter table public.email_tracking_events enable row level security;
 create index if not exists email_tracking_events_test_id_idx
   on public.email_tracking_events (test_id, element_type, occurred_at);
 
+drop policy if exists "email_tracking_events_select_via_test_owner" on public.email_tracking_events;
 create policy "email_tracking_events_select_via_test_owner"
   on public.email_tracking_events for select
   using (

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Logo } from "@/components/icons";
+import HeaderActions from "@/components/marketing/HeaderActions";
 
 const LINKS = [
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#features", label: "Features" },
   { href: "/#security", label: "Security" },
   { href: "/#faq", label: "FAQ" },
+  { href: "/blog", label: "Blog" },
 ];
 
 export default function SiteHeader() {
@@ -26,12 +28,7 @@ export default function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link href="/login" className="btn-secondary">
-            Sign in
-          </Link>
-          <Link href="/login" className="btn-primary hidden sm:inline-flex">
-            Get started
-          </Link>
+          <HeaderActions />
         </div>
       </div>
     </header>

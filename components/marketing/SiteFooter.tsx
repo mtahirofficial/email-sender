@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/icons";
-import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
+import { SITE_NAME } from "@/lib/site";
 
 export default function SiteFooter() {
   return (
@@ -17,14 +17,10 @@ export default function SiteFooter() {
         </div>
 
         <nav aria-label="Footer" className="flex flex-wrap gap-x-2 gap-y-1 text-sm">
-          <Link href="/login" className="btn-ghost">Sign in</Link>
+          <Link href="/blog" className="btn-ghost">Blog</Link>
+          <Link href="/contact" className="btn-ghost">Contact</Link>
           <Link href="/privacy" className="btn-ghost">Privacy Policy</Link>
           <Link href="/terms" className="btn-ghost">Terms of Service</Link>
-          {CONTACT_EMAIL && (
-            <a href={`mailto:${CONTACT_EMAIL}`} className="btn-ghost">
-              {CONTACT_EMAIL}
-            </a>
-          )}
         </nav>
       </div>
       <div className="border-t border-line">
