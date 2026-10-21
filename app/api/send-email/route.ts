@@ -45,6 +45,20 @@ export async function POST(request: NextRequest) {
       ? (body.subjects as Record<string, unknown>)
       : null;
 
+  // Optional { "<recipient email>": "<message>" } map, same idea as `subjects`.
+  const rawBodies =
+    body?.bodies && typeof body.bodies === "object" && !Array.isArray(body.bodies)
+      ? (body.bodies as Record<string, unknown>)
+      : null;
+
+  function bodyFor(to: string): string {
+    if (rawBodies && Object.prototype.hasOwnProperty.call(rawBodies, to)) {
+      const specific = rawBodies[to];
+      return typeof specific === "string" ? specific.trim() : "";
+    }
+    return message?.trim() ?? "";
+  }
+
   function subjectFor(to: string): string {
     if (rawSubjects && Object.prototype.hasOwnProperty.call(rawSubjects, to)) {
       const specific = rawSubjects[to];
@@ -57,7 +71,7 @@ export async function POST(request: NextRequest) {
     ? rawTo.map((r) => r.trim()).filter(Boolean)
     : parseRecipients(rawTo ?? "");
 
-  if (!accountId || recipients.length === 0 || !message) {
+  if (!accountId || recipients.length === 0) {
     return NextResponse.json(
       { error: "accountId, at least one recipient, subject and body are all required." },
       { status: 400 }
@@ -68,6 +82,14 @@ export async function POST(request: NextRequest) {
   if (invalid.length > 0) {
     return NextResponse.json(
       { error: `These addresses don't look valid: ${invalid.join(", ")}` },
+      { status: 400 }
+    );
+  }
+
+  const missingBody = recipients.filter((r) => !bodyFor(r));
+  if (missingBody.length > 0) {
+    return NextResponse.json(
+      { error: `Every recipient needs a message. Missing for: ${missingBody.join(", ")}` },
       { status: 400 }
     );
   }
@@ -104,9 +126,9 @@ export async function POST(request: NextRequest) {
     const recipientSubject = subjectFor(to);
     try {
       if (provider === "google") {
-        await sendGmail(accessToken, { fromEmail, to, subject: recipientSubject, body: message });
+        await sendGmail(accessToken, { fromEmail, to, subject: recipientSubject, body: bodyFor(to) });
       } else {
-        await sendOutlookMail(accessToken, { to, subject: recipientSubject, body: message });
+        await sendOutlookMail(accessToken, { to, subject: recipientSubject, body: bodyFor(to) });
       }
 
       await logEmailAttempt(supabase, {

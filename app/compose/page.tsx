@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { toHeaderUser } from "@/lib/header-user";
 import { listConnectedAccounts } from "@/lib/accounts";
+import { isAiConfigured } from "@/lib/ai";
 import ConnectAccounts from "@/components/ConnectAccounts";
 import EmailForm from "@/components/EmailForm";
 import AlertBanner from "@/components/AlertBanner";
@@ -36,7 +37,7 @@ export default async function ComposePage() {
           <div className="md:sticky md:top-24">
             <ConnectAccounts accounts={accounts} microsoftEnabled={microsoftEnabled} />
           </div>
-          <EmailForm accounts={accounts} />
+          <EmailForm accounts={accounts} aiEnabled={isAiConfigured()} />
         </div>
       </main>
       <SiteFooter />

@@ -209,3 +209,18 @@ installs). No new environment variables are needed — it reuses
   for signed-out visitors and for tracking-pixel requests.
 - **Accessibility.** Skip link, visible focus, 44px tap targets, WCAG AA
   colour contrast, labelled form controls and live regions for form feedback.
+
+## AI drafting ("Generate with AI")
+
+1. Run `supabase/migrations_add_ai_usage.sql` in the Supabase SQL Editor.
+2. Create a free key at [console.groq.com/keys](https://console.groq.com/keys)
+   and/or [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and add
+   `GROQ_API_KEY` and/or `GEMINI_API_KEY` in Vercel, then redeploy. Groq is tried
+   first and Gemini is the fallback. Until a key exists the button shows "Coming soon".
+3. On Compose, **Generate with AI** opens a dialog. Tick "Write a different
+   message for each recipient" to get one editable version per recipient.
+
+Keys stay on the server. Each account may generate `AI_DAILY_LIMIT` drafts
+per day (default 100) so one user can't use up the shared free quota. Models
+are detected automatically from each provider, because they retire models often;
+leave `GROQ_MODEL` and `GEMINI_MODEL` blank unless you want to force one. Free-tier limits and data policies change, so check them.

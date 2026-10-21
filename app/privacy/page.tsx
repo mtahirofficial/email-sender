@@ -86,6 +86,16 @@ export default function PrivacyPage() {
         only to provide their service to us and are bound by their own privacy terms.
       </p>
 
+      <h2>AI-assisted drafting</h2>
+      <p>
+        If you use &ldquo;Generate with AI&rdquo;, the instructions you type are sent to an AI provider, Groq or
+        Google (Gemini), which writes a draft. We do not send recipient addresses or the contents of your mailbox.
+        Depending on the provider and plan, text sent to a free service may be retained or used by that provider to
+        improve its services, so please do not put passwords or confidential information in your instructions. We
+        keep only a daily count of drafts per account to apply fair-use limits; we do not store your instructions or
+        the drafts the AI writes.
+      </p>
+
       <h2>Cookies</h2>
       <p>
         We use only strictly necessary cookies: a sign-in session cookie and a short-lived security cookie during

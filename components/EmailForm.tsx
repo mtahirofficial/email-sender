@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
-import { AlertIcon, CheckIcon, InfoIcon, SendIcon, SpinnerIcon } from "@/components/icons";
+import AiGenerateModal from "@/components/AiGenerateModal";
+import { AlertIcon, CheckIcon, InfoIcon, SendIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 
 type SendResult = {
   ok: boolean;
@@ -31,7 +32,7 @@ function looksLikeEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }) {
+export default function EmailForm({ accounts, aiEnabled }: { accounts: ConnectedAccount[]; aiEnabled: boolean }) {
   const router = useRouter();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [to, setTo] = useState("");
@@ -44,6 +45,11 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
   // false = each recipient has their own subject row; the main input is hidden
   const [sameSubject, setSameSubject] = useState(true);
   const [perSubjects, setPerSubjects] = useState<Record<string, string>>({});
+
+  // AI drafting: null = one message for everyone (the Message box);
+  // an object = a separate message per recipient, created by "Generate with AI".
+  const [aiOpen, setAiOpen] = useState(false);
+  const [perContent, setPerContent] = useState<Record<string, string> | null>(null);
 
   const hasAccounts = accounts.length > 0;
   const recipients = useMemo(() => parseRecipients(to), [to]);
@@ -84,20 +90,35 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
     }
   }
 
+  function applyDrafts(separate: boolean, drafts: string[]) {
+    if (separate) {
+      const next: Record<string, string> = {};
+      rowRecipients.forEach((email, i) => {
+        next[email] = drafts[i] ?? "";
+      });
+      setPerContent(next);
+    } else {
+      setMessage(drafts[0] ?? "");
+      setPerContent(null);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setResult(null);
     setSending(true);
 
-    const payload = sameSubject
-      ? { accountId, to, subject, body: message }
+    const subjectPart = sameSubject
+      ? { subject }
       : {
-          accountId,
-          to,
           subject,
           subjects: Object.fromEntries(recipients.map((r) => [r, perSubjects[r] ?? subject])),
-          body: message,
         };
+    const bodyPart =
+      perContent === null
+        ? { body: message }
+        : { bodies: Object.fromEntries(recipients.map((r) => [r, perContent[r] ?? ""])) };
+    const payload = { accountId, to, ...subjectPart, ...bodyPart };
 
     const res = await fetch("/api/send-email", {
       method: "POST",
@@ -115,6 +136,7 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
       setSubject("");
       setMessage("");
       setPerSubjects({});
+      setPerContent(null);
     }
   }
 
@@ -266,17 +288,70 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
             </div>
 
             <div>
-              <label htmlFor="body" className="label">
-                Message
-              </label>
-              <textarea
-                id="body"
-                required
-                rows={8}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                className="input resize-y"
-              />
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                {perContent === null ? (
+                  <label htmlFor="body" className="text-sm font-medium text-ink">
+                    Message
+                  </label>
+                ) : (
+                  <span id="message-heading" className="text-sm font-medium text-ink">
+                    Message <span className="font-normal text-ink-soft">for each recipient</span>
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setAiOpen(true)}
+                  disabled={!aiEnabled}
+                  className="btn-secondary min-h-[40px] px-3"
+                >
+                  <SparkleIcon className="h-4 w-4 text-accent" /> Generate with AI
+                  {!aiEnabled && <span className="pill border-line bg-mist text-ink-soft">Coming soon</span>}
+                </button>
+              </div>
+
+              {perContent === null ? (
+                <textarea
+                  id="body"
+                  required
+                  rows={8}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  className="input resize-y"
+                />
+              ) : rowRecipients.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-line bg-paper px-4 py-3 text-xs text-ink-soft">
+                  Add recipients above to see a message for each one.
+                </p>
+              ) : (
+                <>
+                  <div
+                    role="group"
+                    aria-labelledby="message-heading"
+                    className="max-h-[560px] space-y-3 overflow-y-auto rounded-lg border border-line bg-paper p-3"
+                  >
+                    {rowRecipients.map((email) => (
+                      <div key={email} className="rounded-lg border border-line bg-white p-3">
+                        <p className="mb-1.5 truncate text-xs font-medium text-ink-soft" title={email}>
+                          {email}
+                        </p>
+                        <textarea
+                          required
+                          rows={5}
+                          aria-label={`Message for ${email}`}
+                          value={perContent[email] ?? ""}
+                          onChange={(e) => setPerContent((prev) => ({ ...(prev ?? {}), [email]: e.target.value }))}
+                          placeholder="Write or generate this recipient's message"
+                          className="input resize-y"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => setPerContent(null)} className="btn-ghost -ml-3 mt-1 text-xs">
+                    Back to a single message
+                  </button>
+                </>
+              )}
             </div>
 
             <div aria-live="polite">
@@ -323,6 +398,14 @@ export default function EmailForm({ accounts }: { accounts: ConnectedAccount[] }
           </form>
         )}
       </div>
+
+      <AiGenerateModal
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        recipients={rowRecipients}
+        replacesExisting={perContent !== null || message.trim().length > 0}
+        onGenerated={applyDrafts}
+      />
     </section>
   );
 }

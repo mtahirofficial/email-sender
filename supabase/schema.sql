@@ -175,3 +175,15 @@ create table if not exists public.contact_messages (
 alter table public.contact_messages enable row level security;
 
 create index if not exists contact_messages_created_idx on public.contact_messages (created_at desc);
+
+-- ---- AI usage ----
+-- Per-user daily counter for the "Generate with AI" feature.
+create table if not exists public.ai_usage (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  day date not null,
+  count integer not null default 0,
+  primary key (user_id, day)
+);
+
+-- No policies on purpose: only the server (service role) reads or writes this table.
+alter table public.ai_usage enable row level security;
