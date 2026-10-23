@@ -9,7 +9,10 @@ function redirectUri() {
 }
 
 /** Builds the URL that starts the "Connect Gmail" consent flow. */
-export function getGoogleAuthUrl(state: string) {
+const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
+
+/** `withSheets` additionally asks for Google Sheets access (used only by the automation feature). */
+export function getGoogleAuthUrl(state: string, withSheets = false) {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: redirectUri(),
@@ -18,6 +21,7 @@ export function getGoogleAuthUrl(state: string) {
     scope: [
       "https://www.googleapis.com/auth/gmail.send",
       "https://www.googleapis.com/auth/userinfo.email",
+      ...(withSheets ? [SHEETS_SCOPE] : []),
     ].join(" "),
     access_type: "offline", // required to receive a refresh_token
     prompt: "consent", // forces Google to re-issue a refresh_token every time
@@ -46,6 +50,7 @@ export async function exchangeGoogleCode(code: string) {
     refresh_token?: string;
     expires_in: number;
     id_token?: string;
+    scope?: string;
   }>;
 }
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import { MailIcon, PlusIcon, ShieldIcon, UsersIcon } from "@/components/icons";
+import { reconnectHref } from "@/lib/reconnect";
 
 export default function ConnectAccounts({
   accounts,
@@ -47,39 +48,59 @@ export default function ConnectAccounts({
           <p className="mt-2 text-sm text-ink-soft">No accounts connected yet.</p>
         </div>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <ul className="mt-4 space-y-2.5">
           {accounts.map((account) => {
             const isGoogle = account.provider === "google";
+            const needs = Boolean(account.needs_reconnect);
+            const canReconnect = isGoogle || microsoftEnabled;
             return (
               <li
                 key={account.id}
-                className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-2.5"
+                className={`rounded-xl border px-3.5 py-3 ${needs ? "border-amber/40 bg-amber-soft/60" : "border-line bg-paper"}`}
               >
-                <span
-                  aria-hidden="true"
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold ${
-                    isGoogle ? "bg-accent-soft text-accent-deep" : "bg-amber-soft text-amber"
-                  }`}
-                >
-                  {isGoogle ? "G" : "O"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-ink" title={account.email}>
-                    {account.email}
-                  </p>
-                  <p className={`text-xs ${isGoogle ? "text-accent-deep" : "text-amber"}`}>
-                    {isGoogle ? "Gmail" : "Outlook"}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold ${
+                      isGoogle ? "bg-accent-soft text-accent-deep" : "bg-amber-soft text-amber"
+                    }`}
+                  >
+                    {isGoogle ? "G" : "O"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-ink" title={account.email}>
+                      {account.email}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-soft">
+                      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${needs ? "bg-amber" : "bg-accent"}`} />
+                      {isGoogle ? "Gmail" : "Outlook"} ·{" "}
+                      <span className={needs ? "font-medium text-amber" : ""}>{needs ? "Needs reconnect" : "Connected"}</span>
+                    </p>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => disconnect(account.id)}
-                  disabled={removingId === account.id}
-                  aria-label={`Disconnect ${account.email}`}
-                  className="btn-ghost -mr-1 px-2 text-xs"
-                >
-                  {removingId === account.id ? "Removing…" : "Disconnect"}
-                </button>
+
+                {needs && (
+                  <p className="mt-2.5 text-xs leading-relaxed text-amber">
+                    This connection has expired or was removed. Reconnect to keep sending.
+                  </p>
+                )}
+
+                <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2 border-t border-line/70 pt-2.5">
+                  {needs && canReconnect && (
+                    <a href={reconnectHref(account)} aria-label={`Reconnect ${account.email}`} className="btn-primary min-h-[40px] px-3.5 text-xs">
+                      Reconnect
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => disconnect(account.id)}
+                    disabled={removingId === account.id}
+                    aria-label={`Disconnect ${account.email}`}
+                    className="btn-ghost min-h-[40px] px-3 text-xs"
+                  >
+                    {removingId === account.id ? "Removing…" : "Disconnect"}
+                  </button>
+                </div>
               </li>
             );
           })}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import AiGenerateModal from "@/components/AiGenerateModal";
+import { reconnectHref } from "@/lib/reconnect";
 import { AlertIcon, CheckIcon, InfoIcon, SendIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 
 type SendResult = {
@@ -13,6 +14,7 @@ type SendResult = {
   failedCount?: number;
   results?: { to: string; ok: boolean; error?: string }[];
   error?: string;
+  reconnect?: "google" | "microsoft";
 };
 
 // Per-recipient subject rows: fixed row height so exactly 10 fit before scrolling.
@@ -32,7 +34,16 @@ function looksLikeEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export default function EmailForm({ accounts, aiEnabled }: { accounts: ConnectedAccount[]; aiEnabled: boolean }) {
+export default function EmailForm({
+  accounts,
+  aiEnabled,
+  draftKey,
+}: {
+  accounts: ConnectedAccount[];
+  aiEnabled: boolean;
+  /** Identifies whose unsent draft is kept in this browser (the user id). */
+  draftKey: string;
+}) {
   const router = useRouter();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [to, setTo] = useState("");
@@ -52,6 +63,49 @@ export default function EmailForm({ accounts, aiEnabled }: { accounts: Connected
   const [perContent, setPerContent] = useState<Record<string, string> | null>(null);
 
   const hasAccounts = accounts.length > 0;
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+  const needsReconnect = Boolean(selectedAccount?.needs_reconnect);
+
+  // ---- unsent draft, kept in this browser so a reconnect (which leaves the page) loses nothing ----
+  const storageKey = `outbox:compose-draft:${draftKey}`;
+  const [draftReady, setDraftReady] = useState(false);
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) ?? "null");
+      if (saved && typeof saved === "object") {
+        const text = (v: unknown) => (typeof v === "string" ? v : "");
+        const map = (v: unknown) =>
+          v && typeof v === "object" && !Array.isArray(v)
+            ? Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([, x]) => typeof x === "string")) as Record<string, string>
+            : null;
+        if (accounts.some((a) => a.id === saved.accountId)) setAccountId(saved.accountId);
+        setTo(text(saved.to));
+        setSubject(text(saved.subject));
+        setMessage(text(saved.message));
+        setSameSubject(saved.sameSubject !== false);
+        setPerSubjects(map(saved.perSubjects) ?? {});
+        setPerContent(map(saved.perContent));
+        setRestored(Boolean(text(saved.to) || text(saved.message) || map(saved.perContent)));
+      }
+    } catch {
+      // unreadable draft: start fresh
+    }
+    setDraftReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    try {
+      const empty = !to && !subject && !message && perContent === null && Object.keys(perSubjects).length === 0;
+      if (empty) localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, JSON.stringify({ accountId, to, subject, message, sameSubject, perSubjects, perContent }));
+    } catch {
+      // storage unavailable (private mode): the form still works
+    }
+  }, [draftReady, storageKey, accountId, to, subject, message, sameSubject, perSubjects, perContent]);
   const recipients = useMemo(() => parseRecipients(to), [to]);
   const rowRecipients = useMemo(() => recipients.filter(looksLikeEmail), [recipients]);
   const recipientCount = recipients.length;
@@ -90,16 +144,24 @@ export default function EmailForm({ accounts, aiEnabled }: { accounts: Connected
     }
   }
 
-  function applyDrafts(separate: boolean, drafts: string[]) {
+  function applyGenerated(separate: boolean, items: { subject: string; body: string }[]) {
     if (separate) {
-      const next: Record<string, string> = {};
+      // A different subject and message for every recipient.
+      const bodies: Record<string, string> = {};
+      const subjects: Record<string, string> = {};
       rowRecipients.forEach((email, i) => {
-        next[email] = drafts[i] ?? "";
+        bodies[email] = items[i]?.body ?? "";
+        subjects[email] = items[i]?.subject ?? "";
       });
-      setPerContent(next);
-    } else {
-      setMessage(drafts[0] ?? "");
+      setPerContent(bodies);
+      setPerSubjects(subjects);
+      setSameSubject(false);
+      if (!subject && items[0]) setSubject(items[0].subject);
+    } else if (items[0]) {
+      setMessage(items[0].body);
       setPerContent(null);
+      setSubject(items[0].subject);
+      if (!sameSubject) setPerSubjects(Object.fromEntries(rowRecipients.map((email) => [email, items[0].subject])));
     }
   }
 
@@ -176,9 +238,21 @@ export default function EmailForm({ accounts, aiEnabled }: { accounts: Connected
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.email} ({account.provider === "google" ? "Gmail" : "Outlook"})
+                    {account.needs_reconnect ? " - needs reconnect" : ""}
                   </option>
                 ))}
               </select>
+              {needsReconnect && selectedAccount && (
+                <p role="alert" className="mt-2 flex items-start gap-2 rounded-lg border border-amber/40 bg-amber-soft px-3 py-2.5 text-xs text-amber">
+                  <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    This connection has expired. Reconnect it, then come back: your draft is saved.{" "}
+                    <a href={reconnectHref(selectedAccount)} className="font-medium underline underline-offset-2">
+                      Reconnect now
+                    </a>
+                  </span>
+                </p>
+              )}
             </div>
 
             <div>
@@ -357,7 +431,18 @@ export default function EmailForm({ accounts, aiEnabled }: { accounts: Connected
             <div aria-live="polite">
               {result?.error && (
                 <p className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" /> {result.error}
+                  <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    {result.error}
+                    {result.reconnect && (
+                      <>
+                        {" "}
+                        <a href={`/oauth/${result.reconnect}`} className="font-medium underline underline-offset-2">
+                          Reconnect {result.reconnect === "google" ? "Gmail" : "Outlook"}
+                        </a>
+                      </>
+                    )}
+                  </span>
                 </p>
               )}
               {typeof result?.sentCount === "number" && (
@@ -387,7 +472,11 @@ export default function EmailForm({ accounts, aiEnabled }: { accounts: Connected
               )}
             </div>
 
-            <button type="submit" disabled={sending} className="btn-primary w-full sm:w-auto">
+            {restored && (
+              <p className="text-xs text-ink-soft">We restored your unsent draft from this browser.</p>
+            )}
+
+            <button type="submit" disabled={sending || needsReconnect} className="btn-primary w-full sm:w-auto">
               {sending ? <SpinnerIcon /> : <SendIcon className="h-4 w-4" />}
               {sending
                 ? "Sending…"
@@ -403,8 +492,8 @@ export default function EmailForm({ accounts, aiEnabled }: { accounts: Connected
         open={aiOpen}
         onClose={() => setAiOpen(false)}
         recipients={rowRecipients}
-        replacesExisting={perContent !== null || message.trim().length > 0}
-        onGenerated={applyDrafts}
+        replacesExisting={perContent !== null || message.trim().length > 0 || subject.trim().length > 0}
+        onGenerated={applyGenerated}
       />
     </section>
   );

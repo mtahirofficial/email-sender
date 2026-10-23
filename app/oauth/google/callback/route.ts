@@ -49,6 +49,10 @@ export async function GET(request: NextRequest) {
 
     const email = await getGoogleUserEmail(tokens.access_token);
 
+    // Google lets people untick individual permissions, so check what was really granted.
+    const sheetsFlow = request.cookies.get("google_oauth_sheets")?.value === "1";
+    const sheetsGranted = (tokens.scope ?? "").includes("/auth/spreadsheets");
+
     await saveConnectedAccount(supabase, {
       userId: user.id,
       provider: "google",
@@ -56,10 +60,24 @@ export async function GET(request: NextRequest) {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
       expiresInSeconds: tokens.expires_in,
+      sheetsEnabled: sheetsGranted,
     });
 
-    const response = NextResponse.redirect(new URL("/compose?connected=google", appUrl));
+    const returnTo = request.cookies.get("google_oauth_next")?.value;
+    const safeReturn = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : null;
+
+    let destination = "/compose?connected=google";
+    if (safeReturn && (!sheetsFlow || sheetsGranted)) {
+      destination = `${safeReturn}${safeReturn.includes("?") ? "&" : "?"}connected=${sheetsFlow ? "sheets" : "google"}`;
+    } else if (sheetsFlow) {
+      destination = sheetsGranted
+        ? "/automation?connected=sheets"
+        : `/automation?error=${encodeURIComponent("Google Sheets permission wasn't granted. Tick it on Google's screen to use automation.")}`;
+    }
+    const response = NextResponse.redirect(new URL(destination, appUrl));
     response.cookies.delete("google_oauth_state");
+    response.cookies.delete("google_oauth_sheets");
+    response.cookies.delete("google_oauth_next");
     return response;
   } catch (err) {
     console.error(err);

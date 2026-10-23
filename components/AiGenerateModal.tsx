@@ -19,7 +19,7 @@ export default function AiGenerateModal({
   /** Valid recipient addresses, in the order their rows appear. Never sent to the AI. */
   recipients: string[];
   replacesExisting: boolean;
-  onGenerated: (separate: boolean, drafts: string[]) => void;
+  onGenerated: (separate: boolean, items: { subject: string; body: string }[]) => void;
 }) {
   const [prompt, setPrompt] = useState("");
   const [separate, setSeparate] = useState(false);
@@ -55,7 +55,7 @@ export default function AiGenerateModal({
     setError(null);
     setLoading(true);
 
-    const drafts: string[] = [];
+    const items: { subject: string; body: string }[] = [];
     try {
       for (let done = 0; done < total; done += BATCH) {
         const count = Math.min(BATCH, total - done);
@@ -67,10 +67,10 @@ export default function AiGenerateModal({
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? "Could not generate the email.");
-        drafts.push(...(data.drafts as string[]));
+        items.push(...(data.items as { subject: string; body: string }[]));
         setRemaining(data.remaining ?? null);
       }
-      onGenerated(wantsSeparate, drafts);
+      onGenerated(wantsSeparate, items);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate the email.");
@@ -99,7 +99,7 @@ export default function AiGenerateModal({
             <h2 id="ai-title" className="flex items-center gap-2 font-serif text-xl text-ink">
               <SparkleIcon className="h-5 w-5 text-accent" /> Generate with AI
             </h2>
-            <p className="mt-1 text-sm text-ink-soft">Describe the email and the AI will write a draft you can edit.</p>
+            <p className="mt-1 text-sm text-ink-soft">Describe the email and the AI will write the subject and message. You can edit both.</p>
           </div>
           <button
             type="button"
@@ -152,7 +152,7 @@ export default function AiGenerateModal({
         </label>
 
         {replacesExisting && (
-          <p className="mt-3 text-xs text-ink-soft">This will replace the message you have written so far.</p>
+          <p className="mt-3 text-xs text-ink-soft">This will replace the subject and message you have written so far.</p>
         )}
         <p className="mt-3 text-xs leading-relaxed text-ink-soft">
           Your instructions are sent to an AI provider to write the draft. Recipient addresses are not sent. Don&rsquo;t

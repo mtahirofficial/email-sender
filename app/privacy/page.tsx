@@ -51,6 +51,11 @@ export default function PrivacyPage() {
           and message you send.
         </li>
         <li>
+          <strong>Spreadsheet automation (optional).</strong> If you use it, the ID and tab of the Google Sheet you
+          link, the column letters you choose, your daily limit, the instructions you save for the AI, and a record of
+          which addresses were emailed (so nobody is emailed twice).
+        </li>
+        <li>
           <strong>Connected mailbox details.</strong> When you connect Gmail or Outlook we store the address of
           that mailbox and the OAuth access and refresh tokens needed to send mail for you. Tokens are encrypted
           before they are stored.
@@ -67,6 +72,12 @@ export default function PrivacyPage() {
         your behalf) and your account email address. For Outlook this is <strong>Mail.Send</strong>,
         <strong> User.Read</strong> and <strong>offline_access</strong>. {SITE_NAME} cannot read, search, modify or
         delete the messages in your mailbox.
+      </p>
+      <p>
+        If you turn on spreadsheet automation we also request <strong>Google Sheets</strong> access
+        (<strong>spreadsheets</strong>). Google words this permission as access to your spreadsheets, but {SITE_NAME}
+        reads and writes only the sheet you link: it reads the websites and addresses, and writes a &ldquo;sent&rdquo;
+        mark next to addresses it has emailed. This permission is optional and is requested separately from sending mail.
       </p>
       <p>
         The content you write is passed to Google or Microsoft only to deliver the message you asked us to send.
@@ -92,8 +103,7 @@ export default function PrivacyPage() {
         Google (Gemini), which writes a draft. We do not send recipient addresses or the contents of your mailbox.
         Depending on the provider and plan, text sent to a free service may be retained or used by that provider to
         improve its services, so please do not put passwords or confidential information in your instructions. We
-        keep only a daily count of drafts per account to apply fair-use limits; we do not store your instructions or
-        the drafts the AI writes.
+        keep only a daily count of drafts per account to apply fair-use limits; we do not store the instructions you type in the compose window or the drafts the AI writes. If you use spreadsheet automation, we store the instructions you save there so they can be reused each day.
       </p>
 
       <h2>Cookies</h2>

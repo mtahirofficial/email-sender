@@ -17,6 +17,8 @@ export default function AlertBanner() {
 
   const message = error
     ? error
+    : connected === "sheets"
+    ? "Google Sheets access enabled. You can import your sheet below."
     : connected === "google"
     ? "Gmail account connected. It's ready to send from below."
     : "Outlook account connected. It's ready to send from below.";

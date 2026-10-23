@@ -187,3 +187,83 @@ create table if not exists public.ai_usage (
 
 -- No policies on purpose: only the server (service role) reads or writes this table.
 alter table public.ai_usage enable row level security;
+
+-- ---- Outreach automation ----
+-- Google Sheets outreach automation. Safe to run more than once.
+
+-- Which connected Google accounts also granted Google Sheets access.
+alter table public.connected_accounts add column if not exists sheets_enabled boolean not null default false;
+
+-- One linked sheet per user.
+create table if not exists public.outreach_settings (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  account_id uuid references public.connected_accounts (id) on delete set null,
+  spreadsheet_id text not null,
+  sheet_title text not null,
+  website_col text not null default 'B',
+  email_col text not null default 'C',
+  sent_col text not null default 'D',
+  daily_limit integer not null default 20 check (daily_limit between 1 and 200),
+  prompt text not null default '',
+  timezone text not null default 'UTC',
+  updated_at timestamptz not null default now()
+);
+
+-- Every address emailed through the automation. Prevents duplicate sends even
+-- if writing the tick back to the sheet fails, and powers the daily count.
+create table if not exists public.outreach_sends (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  spreadsheet_id text not null,
+  row_number integer not null,
+  website text,
+  email text not null,
+  sent_day date not null,
+  sent_at timestamptz not null default now(),
+  unique (user_id, spreadsheet_id, email)
+);
+
+create index if not exists outreach_sends_day_idx on public.outreach_sends (user_id, spreadsheet_id, sent_day);
+
+alter table public.outreach_settings enable row level security;
+alter table public.outreach_sends enable row level security;
+
+drop policy if exists "outreach_settings_own" on public.outreach_settings;
+create policy "outreach_settings_own"
+  on public.outreach_settings for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "outreach_sends_select_own" on public.outreach_sends;
+create policy "outreach_sends_select_own"
+  on public.outreach_sends for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "outreach_sends_insert_own" on public.outreach_sends;
+create policy "outreach_sends_insert_own"
+  on public.outreach_sends for insert
+  with check (auth.uid() = user_id);
+
+-- ---- Connection health + saved batches ----
+-- Connection health + saved automation batches. Safe to run more than once.
+
+-- Set when Google/Microsoft stops accepting a saved connection, so the app can show "Reconnect".
+alter table public.connected_accounts add column if not exists needs_reconnect boolean not null default false;
+
+-- The reviewed-but-unsent batch (AI-written subjects and messages), one per user,
+-- so a connection problem never forces the AI to write everything again.
+create table if not exists public.outreach_drafts (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  spreadsheet_id text not null,
+  items jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.outreach_drafts enable row level security;
+
+drop policy if exists "outreach_drafts_own" on public.outreach_drafts;
+create policy "outreach_drafts_own"
+  on public.outreach_drafts for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

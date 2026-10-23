@@ -3,13 +3,15 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { toHeaderUser } from "@/lib/header-user";
-import { listConnectedAccounts } from "@/lib/accounts";
+import { listConnectedAccounts, refreshAccountHealth } from "@/lib/accounts";
 import { isAiConfigured } from "@/lib/ai";
 import ConnectAccounts from "@/components/ConnectAccounts";
 import EmailForm from "@/components/EmailForm";
 import AlertBanner from "@/components/AlertBanner";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import Link from "next/link";
+import { SheetIcon } from "@/components/icons";
 
 export const metadata: Metadata = { title: "Compose", robots: { index: false, follow: false } };
 
@@ -20,7 +22,8 @@ export default async function ComposePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const accounts = await listConnectedAccounts(supabase, user.id);
+  // Flags connections that Google/Microsoft no longer accept, so "Reconnect" shows only when needed.
+  const accounts = await refreshAccountHealth(supabase, user.id, await listConnectedAccounts(supabase, user.id));
   const microsoftEnabled = Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
 
   return (
@@ -37,7 +40,15 @@ export default async function ComposePage() {
           <div className="md:sticky md:top-24">
             <ConnectAccounts accounts={accounts} microsoftEnabled={microsoftEnabled} />
           </div>
-          <EmailForm accounts={accounts} aiEnabled={isAiConfigured()} />
+          <div className="space-y-4">
+            <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
+              <p className="text-sm text-ink-soft">Emailing a list from a Google Sheet every day?</p>
+              <Link href="/automation" className="btn-secondary min-h-[40px] px-3">
+                <SheetIcon className="h-4 w-4 text-accent" /> Automate from a sheet
+              </Link>
+            </div>
+            <EmailForm accounts={accounts} aiEnabled={isAiConfigured()} draftKey={user.id} />
+          </div>
         </div>
       </main>
       <SiteFooter />

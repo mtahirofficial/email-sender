@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getValidAccessToken } from "@/lib/accounts";
+import { accountErrorInfo, getValidAccessToken } from "@/lib/accounts";
 import { sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
 import { logEmailAttempt } from "@/lib/email-logs";
@@ -111,11 +111,9 @@ export async function POST(request: NextRequest) {
     fromEmail = account.email;
     accessToken = account.accessToken;
   } catch (err) {
-    console.error(err);
-    return NextResponse.json(
-      { error: "Could not use that connected account. It may need to be reconnected." },
-      { status: 502 }
-    );
+    console.error("send-email: connected account unusable", err);
+    const info = accountErrorInfo(err);
+    return NextResponse.json({ error: info.message, reconnect: info.reconnect }, { status: 502 });
   }
 
   // Every recipient gets their own, separate email — never combined via

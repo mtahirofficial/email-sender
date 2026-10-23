@@ -14,6 +14,7 @@ import {
   MailIcon,
   PenIcon,
   SendIcon,
+  SheetIcon,
   SettingsIcon,
 } from "@/components/icons";
 
@@ -28,6 +29,7 @@ const PUBLIC_LINKS = [
 const MEMBER_LINKS = [
   { href: "/compose", label: "Compose", Icon: SendIcon },
   { href: "/sent", label: "Sent", Icon: InboxIcon },
+  { href: "/automation", label: "Automation", Icon: SheetIcon },
 ];
 
 const ADMIN_LINKS = [

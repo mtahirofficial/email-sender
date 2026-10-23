@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/server";
 
 /** Drafts one user may generate per UTC day. The free provider quota is shared by everyone. */
-export const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 100;
+export const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 200;
 
 const today = () => new Date().toISOString().slice(0, 10);
 

@@ -148,3 +148,10 @@ export const SparkleIcon = ({ className }: IconProps) => (
     <path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
   </Svg>
 );
+
+export const SheetIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 10h18M3 15h18M9 4v16" />
+  </Svg>
+);
