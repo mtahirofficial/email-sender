@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import AiGenerateModal from "@/components/AiGenerateModal";
 import { reconnectHref } from "@/lib/reconnect";
+import type { AiPreset } from "@/content/ai-presets";
 import { AlertIcon, CheckIcon, InfoIcon, SendIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 
 type SendResult = {
@@ -37,10 +38,12 @@ function looksLikeEmail(value: string) {
 export default function EmailForm({
   accounts,
   aiEnabled,
+  presets,
   draftKey,
 }: {
   accounts: ConnectedAccount[];
   aiEnabled: boolean;
+  presets: AiPreset[];
   /** Identifies whose unsent draft is kept in this browser (the user id). */
   draftKey: string;
 }) {
@@ -491,6 +494,7 @@ export default function EmailForm({
       <AiGenerateModal
         open={aiOpen}
         onClose={() => setAiOpen(false)}
+        presets={presets}
         recipients={rowRecipients}
         replacesExisting={perContent !== null || message.trim().length > 0 || subject.trim().length > 0}
         onGenerated={applyGenerated}

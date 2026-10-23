@@ -263,3 +263,9 @@ re-sending. The daily count follows the timezone of the browser that imported th
   (In production), then reconnect each account once.
 - Unsent compose text is kept in the browser, and the automation batch is saved on the server, so a
   reconnect never loses what is already written.
+
+## AI presets
+
+"Write with AI" shows ready-made prompts (guest post inquiry, follow-up, and so on) as buttons; picking one fills
+the prompt box so the user can edit it. They work out of the box. To let the admin edit them, run
+`supabase/migrations_add_ai_presets.sql`, then open Admin > AI presets and press "Install the built-in presets".

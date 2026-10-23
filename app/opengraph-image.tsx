@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import path from "path";
 import { ImageResponse } from "next/og";
 
 export const alt = "Outbox: send email from your own Gmail or Outlook address";
@@ -5,6 +7,8 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default function OpengraphImage() {
+  const logo = `data:image/png;base64,${readFileSync(path.join(process.cwd(), "public", "logo-512.png")).toString("base64")}`;
+
   return new ImageResponse(
     (
       <div
@@ -33,16 +37,8 @@ export default function OpengraphImage() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", fontSize: 44, color: "#2E5D50", fontWeight: 700 }}>
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 16,
-                background: "#2E5D50",
-                marginRight: 20,
-                display: "flex",
-              }}
-            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logo} width={72} height={72} alt="" style={{ marginRight: 20 }} />
             Outbox
           </div>
           <div style={{ display: "flex", fontSize: 76, fontWeight: 700, lineHeight: 1.08, marginTop: 36, maxWidth: 980 }}>

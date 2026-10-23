@@ -108,16 +108,17 @@ export const SpinnerIcon = ({ className = "h-4 w-4" }: IconProps) => (
   </svg>
 );
 
-/** Brand mark: envelope on a green tile. */
-export function Logo({ className = "h-8 w-8" }: IconProps) {
-  return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
-      <rect width="32" height="32" rx="8" fill="#2E5D50" />
-      <rect x="6.5" y="9.5" width="19" height="13" rx="2.5" fill="none" stroke="#fff" strokeWidth="1.8" />
-      <path d="m7.5 11.5 8.5 6.5 8.5-6.5" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="6.5" y="25" width="19" height="2" rx="1" fill="#C9922E" />
-    </svg>
+/**
+ * Brand mark. The artwork is dark green, so on a dark background pass `onDark`
+ * to seat it on a light rounded tile.
+ */
+export function Logo({ className = "h-8 w-8", onDark = false }: IconProps & { onDark?: boolean }) {
+  const image = (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/logo.png" alt="" width={128} height={128} decoding="async" className={onDark ? "h-full w-full" : className} />
   );
+  if (!onDark) return image;
+  return <span className={`${className} grid place-items-center rounded-xl bg-paper p-[12%]`}>{image}</span>;
 }
 
 export const PenIcon = ({ className }: IconProps) => (

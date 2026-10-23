@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertIcon, SparkleIcon, SpinnerIcon, XIcon } from "@/components/icons";
+import type { AiPreset } from "@/content/ai-presets";
 
 // The API writes at most this many drafts per request, so long recipient
 // lists are generated in sequential batches.
@@ -10,12 +11,15 @@ const BATCH = 8;
 export default function AiGenerateModal({
   open,
   onClose,
+  presets,
   recipients,
   replacesExisting,
   onGenerated,
 }: {
   open: boolean;
   onClose: () => void;
+  /** Ready-made prompts shown as buttons. Picking one fills the box so it can be edited. */
+  presets: AiPreset[];
   /** Valid recipient addresses, in the order their rows appear. Never sent to the AI. */
   recipients: string[];
   replacesExisting: boolean;
@@ -112,6 +116,36 @@ export default function AiGenerateModal({
           </button>
         </div>
 
+        {presets.length > 0 && (
+          <div className="mb-4">
+            <p className="label">Quick start</p>
+            <div role="group" aria-label="Email presets" className="flex flex-wrap gap-2">
+              {presets.map((preset) => {
+                const selected = preset.prompt === prompt;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => {
+                      setPrompt(preset.prompt);
+                      textareaRef.current?.focus();
+                    }}
+                    className={`min-h-[40px] rounded-full border px-3.5 text-xs transition-colors ${
+                      selected
+                        ? "border-accent bg-accent-soft font-medium text-accent-deep"
+                        : "border-line bg-white text-ink-soft hover:border-accent hover:text-ink"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-ink-soft">Pick one to fill the box below, then change it if you like.</p>
+          </div>
+        )}
+
         <label htmlFor="ai-prompt" className="label">
           What should the email say?
         </label>
@@ -119,7 +153,7 @@ export default function AiGenerateModal({
           id="ai-prompt"
           ref={textareaRef}
           required
-          rows={6}
+          rows={7}
           minLength={10}
           maxLength={1500}
           value={prompt}

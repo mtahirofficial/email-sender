@@ -9,7 +9,7 @@ export function organizationNode() {
     "@id": ORG_ID,
     name: SITE_NAME,
     url: SITE_URL,
-    logo: { "@type": "ImageObject", url: `${SITE_URL}/icon.svg` },
+    logo: { "@type": "ImageObject", url: `${SITE_URL}/icon-512.png`, width: 512, height: 512 },
   };
 }
 

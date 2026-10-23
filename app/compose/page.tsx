@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toHeaderUser } from "@/lib/header-user";
 import { listConnectedAccounts, refreshAccountHealth } from "@/lib/accounts";
 import { isAiConfigured } from "@/lib/ai";
+import { getAiPresets } from "@/lib/ai-presets";
 import ConnectAccounts from "@/components/ConnectAccounts";
 import EmailForm from "@/components/EmailForm";
 import AlertBanner from "@/components/AlertBanner";
@@ -24,6 +25,7 @@ export default async function ComposePage() {
 
   // Flags connections that Google/Microsoft no longer accept, so "Reconnect" shows only when needed.
   const accounts = await refreshAccountHealth(supabase, user.id, await listConnectedAccounts(supabase, user.id));
+  const presets = await getAiPresets(supabase);
   const microsoftEnabled = Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
 
   return (
@@ -47,7 +49,7 @@ export default async function ComposePage() {
                 <SheetIcon className="h-4 w-4 text-accent" /> Automate from a sheet
               </Link>
             </div>
-            <EmailForm accounts={accounts} aiEnabled={isAiConfigured()} draftKey={user.id} />
+            <EmailForm accounts={accounts} aiEnabled={isAiConfigured()} presets={presets} draftKey={user.id} />
           </div>
         </div>
       </main>

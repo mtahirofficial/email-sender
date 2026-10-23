@@ -62,7 +62,7 @@ export default function LoginPage() {
     <div className="grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]">
       <aside className="relative hidden flex-col justify-between overflow-hidden bg-accent-deep p-12 text-white lg:flex">
         <Link href="/" className="flex items-center gap-2.5" aria-label="Outbox home">
-          <Logo className="h-9 w-9" />
+          <Logo className="h-10 w-10" onDark />
           <span className="font-serif text-2xl">Outbox</span>
         </Link>
 
