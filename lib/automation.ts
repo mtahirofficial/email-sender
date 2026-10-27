@@ -1,19 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { AccountAuthError, accountErrorInfo, getValidAccessToken } from "@/lib/accounts";
+import { AccountAuthError, accountErrorInfo, getValidAccessToken, listConnectedAccounts, type Provider } from "@/lib/accounts";
+import { sendGmail } from "@/lib/google";
+import { sendOutlookMail } from "@/lib/microsoft";
 import { SheetsError, colIndex, parseSheet, readValues, writeCells, type SheetItem } from "@/lib/sheets";
 
 export type OutreachSettings = {
   user_id: string;
-  account_id: string | null;
+  account_id: string | null; // the Gmail account that has Google Sheets access
   spreadsheet_id: string;
   sheet_title: string;
   website_col: string;
   email_col: string;
   sent_col: string;
-  daily_limit: number;
+  filter_col: string | null;
+  filter_value: string | null;
   prompt: string;
   timezone: string;
+  schedule_enabled: boolean;
+  schedule_time: string; // HH:MM in `timezone`
+  pause_seconds: number;
+  last_scheduled_day: string | null;
+  schedule_retry_at: string | null;
+  schedule_error: string | null;
 };
 
 export class AutomationError extends Error {
@@ -50,18 +59,7 @@ export function todayIn(timezone: string): string {
   }
 }
 
-export async function sentTodayCount(supabase: SupabaseClient, settings: OutreachSettings): Promise<number> {
-  const { count, error } = await supabase
-    .from("outreach_sends")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", settings.user_id)
-    .eq("spreadsheet_id", settings.spreadsheet_id)
-    .eq("sent_day", todayIn(settings.timezone));
-  if (error) throw error;
-  return count ?? 0;
-}
-
-/** Access token of the connected Google account, which must also have Sheets access. */
+/** Access token of the connected Google account that also has Sheets access. */
 export async function getSheetsAccess(supabase: SupabaseClient, userId: string, accountId: string | null) {
   if (!accountId) throw new AutomationError("Choose a connected Gmail account first.");
   const { data: account } = await supabase
@@ -78,52 +76,134 @@ export async function getSheetsAccess(supabase: SupabaseClient, userId: string, 
   return { accessToken, fromEmail: email };
 }
 
-type Columns = Pick<OutreachSettings, "website_col" | "email_col" | "sent_col">;
+// ---- reading the sheet -------------------------------------------------------
 
-export async function loadSheetItems(accessToken: string, spreadsheetId: string, title: string, cols: Columns): Promise<SheetItem[]> {
-  const idx = { website: colIndex(cols.website_col), email: colIndex(cols.email_col), sent: colIndex(cols.sent_col) };
-  const lastCol = String.fromCharCode(65 + Math.max(idx.website, idx.email, idx.sent));
-  return parseSheet(await readValues(accessToken, spreadsheetId, title, lastCol), idx);
+type SheetColumns = Pick<OutreachSettings, "spreadsheet_id" | "sheet_title" | "website_col" | "email_col" | "sent_col" | "filter_col" | "filter_value">;
+
+export async function loadSheet(accessToken: string, s: SheetColumns) {
+  const idx = { website: colIndex(s.website_col), email: colIndex(s.email_col), sent: colIndex(s.sent_col) };
+  const filter = s.filter_col && s.filter_value?.trim() ? { col: colIndex(s.filter_col), value: s.filter_value.trim().toLowerCase() } : undefined;
+  const last = Math.max(idx.website, idx.email, idx.sent, filter?.col ?? 0);
+  const values = await readValues(accessToken, s.spreadsheet_id, s.sheet_title, String.fromCharCode(65 + last));
+  return { items: parseSheet(values, { ...idx, filter }), values, idx };
+}
+
+/** Appends "✓ address" to the sent cell of each row, keeping whatever is already there. */
+export async function markSent(accessToken: string, settings: SheetColumns, emails: string[]) {
+  if (emails.length === 0) return;
+  const { items, values, idx } = await loadSheet(accessToken, settings);
+  const wanted = new Set(emails.map((e) => e.toLowerCase()));
+
+  const byRow = new Map<number, string[]>();
+  for (const item of items) {
+    if (!wanted.has(item.email) || item.sent) continue;
+    byRow.set(item.row, [...(byRow.get(item.row) ?? []), item.email]);
+  }
+
+  const entries = [...byRow].map(([row, list]) => {
+    const existing = (values[row - 1]?.[idx.sent] ?? "").trim();
+    return { row, text: [existing, ...list.map((e) => `\u2713 ${e}`)].filter(Boolean).join(", ") };
+  });
+  await writeCells(accessToken, settings.spreadsheet_id, settings.sheet_title, settings.sent_col, entries);
 }
 
 export type SheetStats = { total: number; websites: number; sent: number; pending: number };
 
 /**
  * Reads the sheet and works out what is still to send. Addresses we already
- * emailed but could not tick in the sheet (an earlier write failed) are ticked
- * now and never sent twice.
+ * emailed but could not mark in the sheet (an earlier write failed) are marked
+ * now and never sent twice. Addresses already waiting in the schedule queue are
+ * left out of `pool`.
  */
-export async function computePending(
-  supabase: SupabaseClient,
-  accessToken: string,
-  settings: OutreachSettings
-): Promise<{ pending: SheetItem[]; stats: SheetStats }> {
-  const items = await loadSheetItems(accessToken, settings.spreadsheet_id, settings.sheet_title, settings);
+export async function computePending(supabase: SupabaseClient, accessToken: string, settings: OutreachSettings) {
+  const { items } = await loadSheet(accessToken, settings);
 
-  const { data: sends } = await supabase
-    .from("outreach_sends")
-    .select("email")
-    .eq("user_id", settings.user_id)
-    .eq("spreadsheet_id", settings.spreadsheet_id);
+  const [{ data: sends }, { data: queued }] = await Promise.all([
+    supabase.from("outreach_sends").select("email").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id),
+    supabase.from("outreach_queue").select("email").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id).eq("status", "pending"),
+  ]);
   const alreadySent = new Set((sends ?? []).map((s) => (s.email as string).toLowerCase()));
+  const inQueue = new Set((queued ?? []).map((q) => (q.email as string).toLowerCase()));
 
-  const unticked = items.filter((i) => !i.sent && alreadySent.has(i.email.toLowerCase()));
-  if (unticked.length > 0) {
+  const unmarked = items.filter((i) => !i.sent && alreadySent.has(i.email));
+  if (unmarked.length > 0) {
     try {
-      await writeCells(accessToken, settings.spreadsheet_id, settings.sheet_title, settings.sent_col, unticked.map((i) => ({ row: i.row, text: "✓" })));
+      await markSent(accessToken, settings, unmarked.map((i) => i.email));
     } catch (err) {
-      console.error("automation: could not back-fill ticks", err);
+      console.error("automation: could not back-fill marks", err);
     }
   }
 
-  const pending = items.filter((i) => !i.sent && !alreadySent.has(i.email.toLowerCase()));
-  return {
-    pending,
-    stats: {
-      total: items.length,
-      websites: new Set(items.map((i) => i.website)).size,
-      sent: items.length - pending.length,
-      pending: pending.length,
-    },
+  const open = items.filter((i) => !i.sent && !alreadySent.has(i.email));
+  const seen = new Set<string>();
+  const pool = open.filter((i) => {
+    if (inQueue.has(i.email) || seen.has(i.email)) return false;
+    seen.add(i.email);
+    return true;
+  });
+
+  const stats: SheetStats = {
+    total: items.length,
+    websites: new Set(items.map((i) => i.website)).size,
+    sent: items.length - open.length,
+    pending: open.length,
   };
+  return { pool, stats };
+}
+
+// ---- sender accounts ---------------------------------------------------------
+
+export type Sender = { accountId: string; email: string; provider: Provider; limit: number; enabled: boolean; needsReconnect: boolean };
+
+/** Every connected account with its per-account daily limit (default 20, enabled). */
+export async function listSenders(supabase: SupabaseClient, userId: string): Promise<Sender[]> {
+  const accounts = await listConnectedAccounts(supabase, userId);
+  const { data } = await supabase.from("outreach_senders").select("account_id, daily_limit, enabled").eq("user_id", userId);
+  const config = new Map((data ?? []).map((r) => [r.account_id as string, r]));
+  return accounts.map((a) => ({
+    accountId: a.id,
+    email: a.email,
+    provider: a.provider,
+    limit: config.get(a.id)?.daily_limit ?? 20,
+    enabled: config.get(a.id)?.enabled ?? true,
+    needsReconnect: Boolean(a.needs_reconnect),
+  }));
+}
+
+/** Emails each account has used today: already sent plus waiting in today's queue. */
+export async function usedTodayByAccount(supabase: SupabaseClient, settings: OutreachSettings): Promise<Map<string, number>> {
+  const day = todayIn(settings.timezone);
+  const [{ data: sends }, { data: queued }] = await Promise.all([
+    supabase.from("outreach_sends").select("account_id").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id).eq("sent_day", day),
+    supabase.from("outreach_queue").select("account_id").eq("user_id", settings.user_id).eq("day", day).eq("status", "pending"),
+  ]);
+  const used = new Map<string, number>();
+  for (const row of [...(sends ?? []), ...(queued ?? [])]) {
+    const id = row.account_id as string | null;
+    if (id) used.set(id, (used.get(id) ?? 0) + 1);
+  }
+  return used;
+}
+
+/** Hands the next unsent addresses to each usable sender, up to what is left of its daily limit. */
+export function assignItems(pool: SheetItem[], senders: Sender[], used: Map<string, number>) {
+  const plan: { sender: Sender; item: SheetItem }[] = [];
+  let cursor = 0;
+  for (const sender of senders.filter((s) => s.enabled && !s.needsReconnect)) {
+    const room = Math.max(0, sender.limit - (used.get(sender.accountId) ?? 0));
+    for (let n = 0; n < room && cursor < pool.length; n++) plan.push({ sender, item: pool[cursor++] });
+  }
+  return plan;
+}
+
+// ---- sending -------------------------------------------------------------------
+
+export async function sendViaAccount(
+  ctx: { provider: Provider; email: string; accessToken: string },
+  to: string,
+  subject: string,
+  body: string
+) {
+  if (ctx.provider === "google") await sendGmail(ctx.accessToken, { fromEmail: ctx.email, to, subject, body });
+  else await sendOutlookMail(ctx.accessToken, { to, subject, body });
 }

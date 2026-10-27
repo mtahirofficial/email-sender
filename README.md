@@ -126,7 +126,7 @@ connect Gmail and/or Outlook, and send a test email to yourself.
 
 ## Notes on going to production
 
-- **Deploy** (e.g. Vercel) and update `NEXT_PUBLIC_APP_URL`, the Supabase
+- **Deploy** (Hostinger) and update `NEXT_PUBLIC_APP_URL`, the Supabase
   redirect URL, and both OAuth apps' redirect URIs to your real domain.
 - **Google verification**: apps requesting `gmail.send` for more than a
   handful of test users need to pass Google's OAuth app verification
@@ -215,7 +215,7 @@ installs). No new environment variables are needed — it reuses
 1. Run `supabase/migrations_add_ai_usage.sql` in the Supabase SQL Editor.
 2. Create a free key at [console.groq.com/keys](https://console.groq.com/keys)
    and/or [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and add
-   `GROQ_API_KEY` and/or `GEMINI_API_KEY` in Vercel, then redeploy. Groq is tried
+   `GROQ_API_KEY` and/or `GEMINI_API_KEY` in your Hostinger environment variables, then redeploy. Groq is tried
    first and Gemini is the fallback. Until a key exists the button shows "Coming soon".
 3. On Compose, **Generate with AI** opens a dialog. Tick "Write a different
    message for each recipient" to get one editable version per recipient.
@@ -269,3 +269,35 @@ re-sending. The daily count follows the timezone of the browser that imported th
 "Write with AI" shows ready-made prompts (guest post inquiry, follow-up, and so on) as buttons; picking one fills
 the prompt box so the user can edit it. They work out of the box. To let the admin edit them, run
 `supabase/migrations_add_ai_presets.sql`, then open Admin > AI presets and press "Install the built-in presets".
+
+## Scheduled automation (per-account limits, daily schedule)
+
+1. Run `supabase/migrations_add_scheduled_automation.sql` (after the earlier automation migrations).
+2. Sheet layout: one row per website. Defaults: domain in B, all its emails in E (comma separated), a sent column F that
+   receives `✓ address` marks, and only rows where D says `Yes` are used (change or clear this on the Automation page).
+3. On the Automation page set **Per day** for every sending account (Gmail and Outlook), then turn on the **Daily schedule**
+   and choose the start time and the pause between emails. The AI prompt (with presets) is the one under "Your sheet".
+4. How it runs: at the start time the emails for every account are written and queued with spaced send times; every tick sends
+   what is due. A tick happens (a) once a minute while the Automation page is open, and (b) whenever
+   `GET/POST /api/cron/automation` is called with `Authorization: Bearer $CRON_SECRET`.
+5. For runs with your computer off, add a Hostinger cron job (see "Hosting on Hostinger" below).
+
+## Hosting on Hostinger
+
+Needs a Hostinger plan with Node.js apps (Business web hosting, or Cloud). Names in hPanel may differ slightly.
+
+1. hPanel > Websites > Add Website > **Node.js web app**. Upload this zip (or connect a GitHub repository). Next.js is
+   detected automatically; choose Node 20 or newer. The build needs memory (2 GB or more is recommended).
+2. **Add every environment variable before the first build** (the `NEXT_PUBLIC_*` ones are baked in while building):
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL` (your
+   real https domain, no trailing slash), `NEXT_PUBLIC_CONTACT_EMAIL`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` (optional), `GROQ_API_KEY` and/or
+   `GEMINI_API_KEY`, `CRON_SECRET`, and optionally `ADMIN_EMAIL`, `AI_DAILY_LIMIT`.
+3. Deploy. Then change every address that pointed at the old site to the new domain: Supabase Authentication > URL
+   Configuration (Site URL and `/auth/callback`), the Google OAuth redirect `https://DOMAIN/oauth/google/callback`
+   and the Microsoft one `https://DOMAIN/oauth/microsoft/callback`.
+4. Keep the same `TOKEN_ENCRYPTION_KEY` you used before, or every connected mailbox must be reconnected.
+5. **Background runs:** open Admin > Scheduler in the app. It shows the exact cron command with your domain filled in.
+   In hPanel go to Advanced > Cron Jobs, add a job every 5 minutes with that command (the secret must be written into the
+   command; cron jobs do not get the app's environment variables). Hostinger Node.js apps run on demand, so these
+   calls also keep the app awake.

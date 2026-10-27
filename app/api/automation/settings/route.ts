@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { AutomationError, automationErrorResponse, computePending, getSheetsAccess, sentTodayCount, type OutreachSettings } from "@/lib/automation";
+import { AutomationError, automationErrorResponse, computePending, getSheetsAccess, type OutreachSettings } from "@/lib/automation";
 import { parseSpreadsheetUrl, resolveSheetTitle } from "@/lib/sheets";
 
 export const maxDuration = 60;
@@ -22,12 +22,15 @@ export async function POST(request: NextRequest) {
     if (!parsedUrl) throw new AutomationError("That doesn't look like a Google Sheets link.");
 
     const cols = [str(body?.websiteCol), str(body?.emailCol), str(body?.sentCol)];
-    if (!cols.every((c) => COLUMN.test(c))) throw new AutomationError("Columns must be single letters, like B, C and D.");
+    if (!cols.every((c) => COLUMN.test(c))) throw new AutomationError("Columns must be single letters, like B, E and F.");
     const [websiteCol, emailCol, sentCol] = cols.map((c) => c.toUpperCase());
-    if (new Set([websiteCol, emailCol, sentCol]).size !== 3) throw new AutomationError("The three columns must be different.");
+    if (new Set([websiteCol, emailCol, sentCol]).size !== 3) throw new AutomationError("The website, emails and sent columns must be different.");
 
-    const dailyLimit = Number(body?.dailyLimit);
-    if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 200) throw new AutomationError("Daily limit must be between 1 and 200.");
+    // Optional filter, for example only rows where the "Guest Post?" column says Yes.
+    const filterColRaw = str(body?.filterCol);
+    const filterValue = str(body?.filterValue);
+    if (filterColRaw && !COLUMN.test(filterColRaw)) throw new AutomationError("The filter column must be a single letter, or empty.");
+    const useFilter = Boolean(filterColRaw && filterValue);
 
     const prompt = str(body?.prompt);
     if (prompt.length < 10 || prompt.length > 1500) throw new AutomationError("Describe what the emails should say in 10 to 1500 characters.");
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
     const { accessToken } = await getSheetsAccess(supabase, user.id, accountId);
     const sheetTitle = await resolveSheetTitle(accessToken, parsedUrl.id, parsedUrl.gid);
 
-    const settings: OutreachSettings = {
+    const settings = {
       user_id: user.id,
       account_id: accountId,
       spreadsheet_id: parsedUrl.id,
@@ -47,22 +50,21 @@ export async function POST(request: NextRequest) {
       website_col: websiteCol,
       email_col: emailCol,
       sent_col: sentCol,
-      daily_limit: dailyLimit,
+      filter_col: useFilter ? filterColRaw.toUpperCase() : null,
+      filter_value: useFilter ? filterValue : null,
       prompt,
       timezone,
-    };
+    } as OutreachSettings;
 
     const { stats } = await computePending(supabase, accessToken, settings);
     if (stats.total === 0) {
-      throw new AutomationError(`No email addresses found in column ${emailCol} of "${sheetTitle}". Check the column letters.`);
+      throw new AutomationError(`No email addresses found in column ${emailCol} of "${sheetTitle}"${useFilter ? ` (rows where column ${filterColRaw.toUpperCase()} is "${filterValue}")` : ""}. Check the column letters.`);
     }
 
-    const { error } = await supabase
-      .from("outreach_settings")
-      .upsert({ ...settings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const { error } = await supabase.from("outreach_settings").upsert({ ...settings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
     if (error) throw error;
 
-    return NextResponse.json({ ok: true, sheetTitle, stats, sentToday: await sentTodayCount(supabase, settings) });
+    return NextResponse.json({ ok: true, sheetTitle, stats });
   } catch (err) {
     return automationErrorResponse(err);
   }

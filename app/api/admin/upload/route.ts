@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/require-admin";
 
 const BUCKET = "blog-images";
-const MAX_BYTES = 4 * 1024 * 1024; // Vercel rejects request bodies above ~4.5 MB
+const MAX_BYTES = 4 * 1024 * 1024; // keep uploads small (serverless hosts limit request bodies)
 const TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",

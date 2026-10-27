@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { AutomationError, automationErrorResponse, computePending, getSettings, getSheetsAccess, sentTodayCount } from "@/lib/automation";
+import { AutomationError, assignItems, automationErrorResponse, computePending, getSettings, getSheetsAccess, listSenders, usedTodayByAccount } from "@/lib/automation";
 
 export const maxDuration = 60;
 
-// Reads the sheet fresh and returns the next unsent addresses that still fit in today's limit.
+// Reads the sheet fresh and hands the next unsent addresses to each sending account,
+// up to what is left of that account's daily limit.
 export async function POST() {
   const supabase = createClient();
   const {
@@ -17,24 +18,17 @@ export async function POST() {
     if (!settings) throw new AutomationError("Import a sheet first.");
 
     const { accessToken } = await getSheetsAccess(supabase, user.id, settings.account_id);
-    const { pending, stats } = await computePending(supabase, accessToken, settings);
-    const sentToday = await sentTodayCount(supabase, settings);
-    const room = Math.max(0, settings.daily_limit - sentToday);
-    const seen = new Set<string>();
-    const unique = pending.filter((i) => {
-      const key = i.email.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    const { pool, stats } = await computePending(supabase, accessToken, settings);
+    const senders = await listSenders(supabase, user.id);
+    const used = await usedTodayByAccount(supabase, settings);
+    const plan = assignItems(pool, senders, used);
 
     return NextResponse.json({
       ok: true,
-      items: unique.slice(0, room).map(({ row, website, email }) => ({ row, website, email })),
+      items: plan.map(({ sender, item }) => ({ row: item.row, website: item.website, email: item.email, accountId: sender.accountId, fromEmail: sender.email })),
       prompt: settings.prompt,
-      sentToday,
-      limit: settings.daily_limit,
       stats,
+      skipped: senders.filter((s) => s.enabled && s.needsReconnect).map((s) => s.email),
     });
   } catch (err) {
     return automationErrorResponse(err);

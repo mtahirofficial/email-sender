@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { isAdminUser } from "@/lib/admin";
+import { getHeartbeat, isHeartbeatFresh } from "@/lib/scheduler";
 import { toHeaderUser } from "@/lib/header-user";
-import { getSettings } from "@/lib/automation";
+import { getSettings, listSenders } from "@/lib/automation";
+import { getAiPresets } from "@/lib/ai-presets";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import AlertBanner from "@/components/AlertBanner";
@@ -41,13 +44,20 @@ export default async function AutomationPage() {
         website_col: s.website_col,
         email_col: s.email_col,
         sent_col: s.sent_col,
-        daily_limit: s.daily_limit,
+        filter_col: s.filter_col ?? null,
+        filter_value: s.filter_value ?? null,
         prompt: s.prompt,
+        schedule_enabled: Boolean(s.schedule_enabled),
+        schedule_time: s.schedule_time ?? "10:00",
+        pause_seconds: s.pause_seconds ?? 90,
       };
     }
   } catch {
     migrationMissing = true;
   }
+
+  const [senders, presets] = await Promise.all([listSenders(supabase, user.id), getAiPresets(supabase)]);
+  const lastTickAt = await getHeartbeat(createAdminClient()).catch(() => null);
 
   return (
     <>
@@ -55,8 +65,8 @@ export default async function AutomationPage() {
       <main id="main" className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="font-serif text-3xl text-ink">Automation</h1>
         <p className="mb-6 mt-1 max-w-2xl text-sm leading-relaxed text-ink-soft">
-          Link a Google Sheet of websites and email addresses. Every day Outbox picks the next unsent addresses,
-          writes a subject and message for each one with AI, and after you review and send, ticks them off in your sheet.
+          Link a Google Sheet of websites and email addresses. Outbox writes a subject and message for every address with AI and sends them
+          from your connected accounts, either when you press a button or automatically every day, and marks each address in your sheet.
         </p>
 
         <Suspense fallback={null}>
@@ -65,11 +75,18 @@ export default async function AutomationPage() {
 
         {migrationMissing && (
           <p role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            The database isn&rsquo;t ready for this feature yet. Run supabase/migrations_add_automation.sql in the Supabase SQL Editor.
+            The database isn&rsquo;t ready for this feature yet. Run supabase/migrations_add_automation.sql and
+            supabase/migrations_add_scheduled_automation.sql in the Supabase SQL Editor.
           </p>
         )}
 
-        <AutomationPanel accounts={accounts} settings={settings} />
+        <AutomationPanel
+          accounts={accounts}
+          settings={settings}
+          senders={senders}
+          presets={presets}
+          background={{ active: isHeartbeatFresh(lastTickAt), isAdmin: isAdminUser(user) }}
+        />
       </main>
       <SiteFooter />
     </>

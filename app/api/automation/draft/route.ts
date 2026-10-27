@@ -55,6 +55,8 @@ export async function PUT(request: NextRequest) {
         row,
         website: typeof e.website === "string" && e.website ? e.website.slice(0, 200) : null,
         email,
+        accountId: typeof e.accountId === "string" ? e.accountId.slice(0, 64) : "",
+        fromEmail: typeof e.fromEmail === "string" ? e.fromEmail.slice(0, 200) : "",
         subject: typeof e.subject === "string" ? e.subject.slice(0, 300) : "",
         body: typeof e.body === "string" ? e.body.slice(0, 8000) : "",
         skip: e.skip === true,

@@ -37,6 +37,7 @@ const ADMIN_LINKS = [
   { href: "/admin/blog", label: "Blog manager", Icon: PenIcon },
   { href: "/admin/messages", label: "Messages", Icon: MailIcon },
   { href: "/admin/presets", label: "AI presets", Icon: SparkleIcon },
+  { href: "/admin/scheduler", label: "Scheduler", Icon: SheetIcon },
   { href: "/email-test", label: "Tracking test", Icon: FlaskIcon },
 ];
 

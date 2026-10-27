@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 /**
  * Renders a timestamp in the *viewer's* timezone. Server-rendered dates would
- * otherwise show the server's timezone (UTC on Vercel).
+ * otherwise show the server's timezone (often UTC).
  */
 export default function LocalTime({
   iso,

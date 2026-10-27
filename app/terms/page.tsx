@@ -66,7 +66,7 @@ export default function TermsPage() {
 
       <h2>Third-party services</h2>
       <p>
-        The service depends on Google, Microsoft, Supabase and Vercel. Their availability and terms are outside our
+        The service depends on Google, Microsoft, Supabase and our hosting provider. Their availability and terms are outside our
         control, and your use of Google and Microsoft accounts is also governed by their terms.
       </p>
 

@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertIcon, CheckIcon, SheetIcon, ShieldIcon, SparkleIcon, SendIcon, SpinnerIcon } from "@/components/icons";
+import PresetPicker from "@/components/PresetPicker";
+import LocalTime from "@/components/LocalTime";
+import { reconnectHref } from "@/lib/reconnect";
+import type { AiPreset } from "@/content/ai-presets";
+import { AlertIcon, CheckIcon, SheetIcon, ShieldIcon, SparkleIcon, SendIcon, SpinnerIcon, UsersIcon } from "@/components/icons";
 
 export type GoogleAccount = { id: string; email: string; sheets_enabled: boolean };
+export type SenderView = { accountId: string; email: string; provider: "google" | "microsoft"; limit: number; enabled: boolean; needsReconnect: boolean };
 export type SettingsView = {
   account_id: string | null;
   spreadsheet_id: string;
@@ -11,15 +16,22 @@ export type SettingsView = {
   website_col: string;
   email_col: string;
   sent_col: string;
-  daily_limit: number;
+  filter_col: string | null;
+  filter_value: string | null;
   prompt: string;
+  schedule_enabled: boolean;
+  schedule_time: string;
+  pause_seconds: number;
 };
 
 type Stats = { total: number; websites: number; sent: number; pending: number };
+type QueueInfo = { queued: number; pending: number; sent: number; failed: number; nextAt: string | null };
 type BatchItem = {
   row: number;
   website: string | null;
   email: string;
+  accountId: string;
+  fromEmail: string;
   subject: string;
   body: string;
   skip: boolean;
@@ -35,14 +47,15 @@ class ApiError extends Error {
     super(message);
   }
 }
-
 const reconnectOf = (err: unknown) => (err instanceof ApiError ? err.reconnect ?? null : null);
+const message = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
-async function postJson(url: string, body?: unknown) {
+async function api(url: string, method: "GET" | "POST" | "PUT" | "DELETE" = "POST", body?: unknown) {
   const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error ?? "Something went wrong.", data.reconnect);
@@ -74,18 +87,27 @@ function Alert({ children, tone = "error" }: { children: React.ReactNode; tone?:
   );
 }
 
-export default function AutomationPanel({ accounts, settings }: { accounts: GoogleAccount[]; settings: SettingsView | null }) {
+export default function AutomationPanel({
+  accounts,
+  settings,
+  senders,
+  presets,
+  background,
+}: {
+  accounts: GoogleAccount[];
+  settings: SettingsView | null;
+  senders: SenderView[];
+  presets: AiPreset[];
+  /** Whether the server-side scheduler is calling the app, so runs continue with this page closed. */
+  background: { active: boolean; isAdmin: boolean };
+}) {
   const sheetsAccounts = accounts.filter((a) => a.sheets_enabled);
 
-  // ---- setup form ----
+  // ---- sheet setup ----
   const [accountId, setAccountId] = useState(settings?.account_id ?? sheetsAccounts[0]?.id ?? "");
   const [sheetUrl, setSheetUrl] = useState(settings ? `https://docs.google.com/spreadsheets/d/${settings.spreadsheet_id}/edit` : "");
-  const [cols, setCols] = useState({
-    website: settings?.website_col ?? "B",
-    email: settings?.email_col ?? "C",
-    sent: settings?.sent_col ?? "D",
-  });
-  const [dailyLimit, setDailyLimit] = useState(settings?.daily_limit ?? 20);
+  const [cols, setCols] = useState({ website: settings?.website_col ?? "B", email: settings?.email_col ?? "E", sent: settings?.sent_col ?? "F" });
+  const [filter, setFilter] = useState({ col: settings ? settings.filter_col ?? "" : "D", value: settings ? settings.filter_value ?? "" : "Yes" });
   const [prompt, setPrompt] = useState(settings?.prompt ?? "");
   const [saving, setSaving] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -95,67 +117,85 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
   const [configured, setConfigured] = useState(Boolean(settings));
   const [tabTitle, setTabTitle] = useState(settings?.sheet_title ?? "");
   const [stats, setStats] = useState<Stats | null>(null);
-  const [sentToday, setSentToday] = useState(0);
-  const [limit, setLimit] = useState(settings?.daily_limit ?? 20);
+  const [used, setUsed] = useState<Record<string, number>>({});
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [reconnect, setReconnect] = useState<"google" | "microsoft" | null>(null);
 
-  // ---- daily batch ----
+  // ---- sending accounts ----
+  const [rows, setRows] = useState(senders.map((s) => ({ ...s, limitText: String(s.limit) })));
+  const [sendersBusy, setSendersBusy] = useState(false);
+  const [sendersNote, setSendersNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // ---- schedule ----
+  const [schedEnabled, setSchedEnabled] = useState(settings?.schedule_enabled ?? false);
+  const [savedEnabled, setSavedEnabled] = useState(settings?.schedule_enabled ?? false);
+  const [schedTime, setSchedTime] = useState(settings?.schedule_time ?? "10:00");
+  const [pause, setPause] = useState(settings?.pause_seconds ?? 90);
+  const [schedBusy, setSchedBusy] = useState<"save" | "run" | "cancel" | null>(null);
+  const [schedNote, setSchedNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [queue, setQueue] = useState<QueueInfo | null>(null);
+  const [schedError, setSchedError] = useState<string | null>(null);
+
+  // ---- manual batch ----
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [batch, setBatch] = useState<BatchItem[]>([]);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tickFailed, setTickFailed] = useState(false);
-  const [reconnect, setReconnect] = useState<"google" | "microsoft" | null>(null);
   const [draftNote, setDraftNote] = useState<string | null>(null);
 
-  // The prepared batch is saved on the server, so a connection problem (or a closed tab)
-  // never costs another round of AI writing.
-  async function saveDraft(items: BatchItem[]) {
-    try {
-      await fetch("/api/automation/draft", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-    } catch {
-      // best effort
-    }
-  }
-
-  async function deleteDraft() {
-    try {
-      await fetch("/api/automation/draft", { method: "DELETE" });
-    } catch {
-      // best effort
-    }
-  }
+  const timezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   async function refreshStatus() {
     try {
-      const res = await fetch("/api/automation/status", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new ApiError(data.error ?? "Could not read the sheet.", data.reconnect);
+      const data = await api("/api/automation/status", "GET");
       if (data.configured) {
         setStats(data.stats);
-        setSentToday(data.sentToday);
-        setLimit(data.limit);
+        setUsed(data.used ?? {});
         setStatusError(null);
       }
     } catch (err) {
-      setStatusError(err instanceof Error ? err.message : "Could not read the sheet.");
+      setStatusError(message(err, "Could not read the sheet."));
       setReconnect(reconnectOf(err));
+    }
+  }
+
+  async function refreshSchedule() {
+    try {
+      const data = await api("/api/automation/schedule", "GET");
+      if (data.configured) {
+        setQueue(data.queue);
+        setSchedError(data.error ?? null);
+      }
+    } catch {
+      // keep what is shown
+    }
+  }
+
+  async function saveDraft(items: BatchItem[]) {
+    try {
+      await api("/api/automation/draft", "PUT", { items });
+    } catch {
+      // best effort
+    }
+  }
+  async function deleteDraft() {
+    try {
+      await api("/api/automation/draft", "DELETE");
+    } catch {
+      // best effort
     }
   }
 
   useEffect(() => {
     if (!settings) return;
     void refreshStatus();
+    void refreshSchedule();
     (async () => {
       try {
-        const res = await fetch("/api/automation/draft", { cache: "no-store" });
-        const data = await res.json();
-        if (res.ok && data.draft?.items?.length) {
+        const data = await api("/api/automation/draft", "GET");
+        if (data.draft?.items?.length) {
           setBatch(data.draft.items as BatchItem[]);
           setPhase("review");
           setDraftNote(new Date(data.draft.updatedAt).toLocaleString());
@@ -166,6 +206,28 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // While the schedule is on and this page is open, it also drives the schedule once a minute.
+  useEffect(() => {
+    if (!configured || !savedEnabled) return;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      try {
+        await api("/api/automation/tick");
+      } catch {
+        // ignore; the next tick tries again
+      }
+      if (!cancelled) {
+        void refreshSchedule();
+        void refreshStatus();
+      }
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configured, savedEnabled]);
 
   // Keep the saved draft in step with edits made while reviewing.
   useEffect(() => {
@@ -182,28 +244,68 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
     setSetupOk(null);
     setReconnect(null);
     try {
-      const data = await postJson("/api/automation/settings", {
+      const data = await api("/api/automation/settings", "POST", {
         accountId,
         sheetUrl,
         websiteCol: cols.website,
         emailCol: cols.email,
         sentCol: cols.sent,
-        dailyLimit,
+        filterCol: filter.col,
+        filterValue: filter.value,
         prompt,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezone: timezone(),
       });
       setConfigured(true);
       setTabTitle(data.sheetTitle);
       setStats(data.stats);
-      setSentToday(data.sentToday);
-      setLimit(dailyLimit);
       setStatusError(null);
       setSetupOk(`Imported "${data.sheetTitle}". ${data.stats.pending} email${data.stats.pending === 1 ? "" : "s"} still to send.`);
+      void refreshStatus();
     } catch (err) {
-      setSetupError(err instanceof Error ? err.message : "Could not import the sheet.");
+      setSetupError(message(err, "Could not import the sheet."));
       setReconnect(reconnectOf(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveSenders() {
+    setSendersBusy(true);
+    setSendersNote(null);
+    try {
+      await api("/api/automation/senders", "POST", {
+        senders: rows.map((r) => ({ accountId: r.accountId, enabled: r.enabled, limit: Number(r.limitText) })),
+      });
+      setSendersNote({ ok: true, text: "Saved." });
+    } catch (err) {
+      setSendersNote({ ok: false, text: message(err, "Could not save.") });
+    } finally {
+      setSendersBusy(false);
+    }
+  }
+
+  async function scheduleAction(action: "save" | "run" | "cancel") {
+    setSchedBusy(action);
+    setSchedNote(null);
+    try {
+      if (action === "save") {
+        await api("/api/automation/schedule", "POST", { action: "save", enabled: schedEnabled, time: schedTime, pauseSeconds: pause, timezone: timezone() });
+        setSavedEnabled(schedEnabled);
+        setSchedNote({ ok: true, text: schedEnabled ? `Schedule saved. It runs every day at ${schedTime}.` : "Schedule turned off." });
+      } else if (action === "run") {
+        const data = await api("/api/automation/schedule", "POST", { action: "run-now" });
+        setSchedNote({ ok: !data.note, text: data.note ?? `Queued ${data.prepared} email${data.prepared === 1 ? "" : "s"}. They are sent with pauses of about ${pause} seconds per account.` });
+      } else {
+        await api("/api/automation/schedule", "POST", { action: "cancel" });
+        setSchedNote({ ok: true, text: "Cancelled the emails that were still waiting." });
+      }
+      void refreshSchedule();
+      void refreshStatus();
+    } catch (err) {
+      setSchedNote({ ok: false, text: message(err, "Something went wrong.") });
+      setReconnect(reconnectOf(err));
+    } finally {
+      setSchedBusy(null);
     }
   }
 
@@ -216,17 +318,15 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
     setDraftNote(null);
     setBatch([]);
     try {
-      const next = await postJson("/api/automation/next");
+      const next = await api("/api/automation/next");
       setStats(next.stats);
-      setSentToday(next.sentToday);
-      setLimit(next.limit);
 
-      const items = next.items as { row: number; website: string | null; email: string }[];
+      const items = next.items as Omit<BatchItem, "subject" | "body" | "skip">[];
       if (items.length === 0) {
         setNotice(
-          next.sentToday >= next.limit
-            ? `Today's limit is reached (${next.sentToday} of ${next.limit}). Come back tomorrow.`
-            : "Nothing left to send. Add more rows to your sheet."
+          next.skipped?.length
+            ? `Nothing to send: ${next.skipped.join(", ")} needs to be reconnected, and the other accounts are at their limit or there are no unsent addresses.`
+            : "Nothing to send: every account is at its daily limit, or no unsent addresses are left."
         );
         setPhase("idle");
         return;
@@ -236,18 +336,14 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
       for (let i = 0; i < items.length; i += AI_CHUNK) {
         const chunk = items.slice(i, i + AI_CHUNK);
         setProgress({ done: i, total: items.length });
-        const data = await postJson("/api/ai/email", {
-          prompt: next.prompt,
-          count: chunk.length,
-          websites: chunk.map((c) => c.website ?? ""),
-        });
+        const data = await api("/api/ai/email", "POST", { prompt: next.prompt, count: chunk.length, websites: chunk.map((c) => c.website ?? "") });
         chunk.forEach((c, j) => written.push({ ...c, subject: data.items[j].subject, body: data.items[j].body, skip: false }));
       }
       setBatch(written);
       setPhase("review");
       await saveDraft(written);
     } catch (err) {
-      setBatchError(err instanceof Error ? err.message : "Could not prepare the batch.");
+      setBatchError(message(err, "Could not prepare the batch."));
       setReconnect(reconnectOf(err));
       setPhase("idle");
     } finally {
@@ -262,14 +358,14 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
 
     let working = batch;
     let stoppedByError = false;
-    const queue = batch.filter((b) => !b.skip && b.status !== "sent");
+    const queueItems = batch.filter((b) => !b.skip && b.status !== "sent");
 
     try {
-      for (let i = 0; i < queue.length; i += SEND_CHUNK) {
-        const chunk = queue.slice(i, i + SEND_CHUNK);
-        setProgress({ done: i, total: queue.length });
-        const data = await postJson("/api/automation/send", {
-          items: chunk.map(({ row, website, email, subject, body }) => ({ row, website, email, subject, body })),
+      for (let i = 0; i < queueItems.length; i += SEND_CHUNK) {
+        const chunk = queueItems.slice(i, i + SEND_CHUNK);
+        setProgress({ done: i, total: queueItems.length });
+        const data = await api("/api/automation/send", "POST", {
+          items: chunk.map(({ row, website, email, subject, body, accountId }) => ({ row, website, email, subject, body, accountId })),
         });
         if (data.tickFailed) setTickFailed(true);
         const results = data.results as { email: string; ok: boolean }[];
@@ -278,18 +374,16 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
           return r ? { ...b, status: r.ok ? ("sent" as const) : ("failed" as const) } : b;
         });
         setBatch(working);
-        setSentToday(data.sentToday);
       }
     } catch (err) {
       stoppedByError = true;
-      setBatchError(err instanceof Error ? err.message : "Sending stopped.");
+      setBatchError(message(err, "Sending stopped."));
       setReconnect(reconnectOf(err));
     } finally {
       setProgress(null);
     }
 
     if (stoppedByError) {
-      // Back to review with everything intact; fix the problem, then press Send again.
       setPhase("review");
       await saveDraft(working);
     } else {
@@ -299,13 +393,18 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
     void refreshStatus();
   }
 
-  const update = (row: number, patch: Partial<BatchItem>) =>
-    setBatch((prev) => prev.map((b) => (b.row === row ? { ...b, ...patch } : b)));
+  const update = (row: number, email: string, patch: Partial<BatchItem>) =>
+    setBatch((prev) => prev.map((b) => (b.row === row && b.email === email ? { ...b, ...patch } : b)));
 
   const toSend = batch.filter((b) => !b.skip && b.status !== "sent").length;
   const sentCount = batch.filter((b) => b.status === "sent").length;
   const failedCount = batch.filter((b) => b.status === "failed").length;
   const busy = phase === "preparing" || phase === "sending";
+  const reconnectLink = (
+    <a href="/oauth/google?sheets=1&next=/automation" className="btn-primary">
+      Reconnect Gmail
+    </a>
+  );
 
   // ---------------------------------------------------------------- render
 
@@ -316,19 +415,14 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
         {accounts.length === 0 ? (
           <p className="text-sm text-ink-soft">
             Connect a Gmail account on the <a href="/compose" className="text-accent-deep underline underline-offset-2">Compose</a> page first.
-            Automation sends through Gmail.
           </p>
         ) : (
           <>
             <p className="text-sm leading-relaxed text-ink-soft">
-              Outbox needs permission to read your sheet and to write the &ldquo;sent&rdquo; tick next to each address.
-              Google words this permission as access to your spreadsheets, but Outbox only opens the one sheet you link below.
+              Outbox needs permission to read your sheet and to mark each address once it has been emailed. Google words this permission as
+              access to your spreadsheets, but Outbox only opens the one sheet you link below.
             </p>
-            {sheetsAccounts.length > 0 && (
-              <p className="mt-3 text-sm text-accent-deep">
-                Enabled for: {sheetsAccounts.map((a) => a.email).join(", ")}
-              </p>
-            )}
+            {sheetsAccounts.length > 0 && <p className="mt-3 text-sm text-accent-deep">Enabled for: {sheetsAccounts.map((a) => a.email).join(", ")}</p>}
             <a href="/oauth/google?sheets=1" className="btn-secondary mt-4">
               <SheetIcon className="h-4 w-4 text-accent" />
               {sheetsAccounts.length > 0 ? "Enable for another Gmail account" : "Enable Google Sheets"}
@@ -337,28 +431,18 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
         )}
       </Card>
 
-      {/* 2. Import */}
+      {/* 2. Sheet + prompt */}
       {sheetsAccounts.length > 0 && (
         <Card title={configured ? "Your sheet" : "Import your sheet"} icon={<SheetIcon className="h-5 w-5 text-accent" />}>
           <form onSubmit={importSheet} className="space-y-5">
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
                 <label htmlFor="sheet-url" className="label">Google Sheet link</label>
-                <input
-                  id="sheet-url"
-                  required
-                  type="url"
-                  value={sheetUrl}
-                  onChange={(e) => setSheetUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className="input"
-                />
-                <p className="mt-1.5 text-xs text-ink-soft">
-                  Paste a link that includes the tab you want (the part with gid=). The sheet must be accessible to the Gmail account below.
-                </p>
+                <input id="sheet-url" required type="url" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." className="input" />
+                <p className="mt-1.5 text-xs text-ink-soft">Include the tab you want (the part with gid=). It must be open to the Google account below.</p>
               </div>
               <div>
-                <label htmlFor="acct" className="label">Gmail account</label>
+                <label htmlFor="acct" className="label">Google account that reads the sheet</label>
                 <select id="acct" value={accountId} onChange={(e) => setAccountId(e.target.value)} className="input">
                   {sheetsAccounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.email}</option>
@@ -372,69 +456,55 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
               <div className="grid grid-cols-3 gap-3">
                 {(
                   [
-                    ["website", "Website"],
-                    ["email", "Emails"],
-                    ["sent", "Sent tick"],
+                    ["website", "Domain"],
+                    ["email", "Emails (comma separated)"],
+                    ["sent", "Sent marks"],
                   ] as const
                 ).map(([key, label]) => (
                   <div key={key}>
                     <label htmlFor={`col-${key}`} className="mb-1 block text-xs text-ink-soft">{label}</label>
-                    <input
-                      id={`col-${key}`}
-                      required
-                      maxLength={1}
-                      value={cols[key]}
-                      onChange={(e) => setCols((c) => ({ ...c, [key]: e.target.value.toUpperCase() }))}
-                      className="input text-center uppercase"
-                    />
+                    <input id={`col-${key}`} required maxLength={1} value={cols[key]} onChange={(e) => setCols((c) => ({ ...c, [key]: e.target.value.toUpperCase() }))} className="input text-center uppercase" />
                   </div>
                 ))}
               </div>
+              <div className="mt-3 grid grid-cols-[90px_1fr] gap-3">
+                <div>
+                  <label htmlFor="filter-col" className="mb-1 block text-xs text-ink-soft">Only rows where column</label>
+                  <input id="filter-col" maxLength={1} value={filter.col} onChange={(e) => setFilter((f) => ({ ...f, col: e.target.value.toUpperCase() }))} className="input text-center uppercase" />
+                </div>
+                <div>
+                  <label htmlFor="filter-value" className="mb-1 block text-xs text-ink-soft">equals (leave empty to use every row)</label>
+                  <input id="filter-value" value={filter.value} onChange={(e) => setFilter((f) => ({ ...f, value: e.target.value }))} className="input" placeholder="Yes" />
+                </div>
+              </div>
               <p className="mt-1.5 text-xs text-ink-soft">
-                Each website sits on its first row; its emails go one per row below it (in the Emails column). Rows with an
-                empty website belong to the website above. A tick is written next to each address once it is emailed.
+                One row per website, with all its emails in one cell. After an email is sent, <span className="font-medium text-ink">✓ address</span> is added to the
+                sent column of that row. Obvious placeholders such as you@company.com are skipped.
               </p>
             </fieldset>
 
-            <div className="grid gap-5 sm:grid-cols-[160px_1fr]">
-              <div>
-                <label htmlFor="daily" className="label">Emails per day</label>
-                <input
-                  id="daily"
-                  type="number"
-                  required
-                  min={1}
-                  max={200}
-                  value={dailyLimit}
-                  onChange={(e) => setDailyLimit(Number(e.target.value))}
-                  className="input"
-                />
-              </div>
-              <div>
-                <label htmlFor="ai-instructions" className="label">What should every email say?</label>
-                <textarea
-                  id="ai-instructions"
-                  required
-                  rows={5}
-                  minLength={10}
-                  maxLength={1500}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="e.g. Introduce our website audit service, offer a free 15-minute call, keep it short and friendly. Mention the recipient's website."
-                  className="input resize-y"
-                />
-                <p className="mt-1.5 text-xs text-ink-soft">
-                  The AI writes a different subject (with the website) and message for every address. Your instructions are sent to an AI
-                  provider; email addresses are not.
-                </p>
-              </div>
+            <div>
+              <label htmlFor="ai-instructions" className="label">What should every email say?</label>
+              <PresetPicker presets={presets} value={prompt} onPick={setPrompt} />
+              <textarea
+                id="ai-instructions"
+                required
+                rows={7}
+                minLength={10}
+                maxLength={1500}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Pick a preset above or describe the email. The AI writes a different subject (mentioning the website) and message for every address."
+                className="input resize-y"
+              />
+              <p className="mt-1.5 text-xs text-ink-soft">
+                This prompt is used for the button batch and for the daily schedule. Your instructions go to an AI provider; email addresses do not.
+              </p>
             </div>
 
             {setupError && <Alert>{setupError}</Alert>}
             {setupOk && <Alert tone="ok">{setupOk}</Alert>}
-            {reconnect === "google" && (setupError || statusError) && (
-              <a href="/oauth/google?sheets=1&next=/automation" className="btn-primary">Reconnect Gmail</a>
-            )}
+            {reconnect === "google" && (setupError || statusError) && reconnectLink}
 
             <button type="submit" disabled={saving} className="btn-primary">
               {saving && <SpinnerIcon />} {configured ? "Save and re-import" : "Import sheet"}
@@ -443,9 +513,138 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
         </Card>
       )}
 
-      {/* 3. Today */}
+      {/* 3. Sending accounts */}
+      {configured && rows.length > 0 && (
+        <Card title="Sending accounts" icon={<UsersIcon className="h-5 w-5 text-accent" />}>
+          <p className="mb-4 text-sm text-ink-soft">
+            Every connected account sends its own share each day. Set how many emails each one may send per day (start low, then raise it over a few weeks).
+          </p>
+          <ul className="space-y-2.5">
+            {rows.map((r, i) => (
+              <li key={r.accountId} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-paper px-3.5 py-3">
+                <label className="flex min-h-[40px] min-w-0 flex-1 cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={r.enabled}
+                    onChange={(e) => setRows((prev) => prev.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))}
+                    className="h-4 w-4 shrink-0 accent-[#2E5D50]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm text-ink" title={r.email}>{r.email}</span>
+                    <span className="block text-xs text-ink-soft">
+                      {r.provider === "google" ? "Gmail" : "Outlook"} · today {used[r.accountId] ?? 0} of {r.limitText || 0}
+                      {r.needsReconnect && <span className="font-medium text-amber"> · needs reconnect</span>}
+                    </span>
+                  </span>
+                </label>
+                {r.needsReconnect && (
+                  <a href={reconnectHref({ provider: r.provider, sheets_enabled: sheetsAccounts.some((a) => a.id === r.accountId) }, "/automation")} className="btn-primary min-h-[40px] px-3 text-xs">
+                    Reconnect
+                  </a>
+                )}
+                <div className="flex items-center gap-2">
+                  <label htmlFor={`limit-${r.accountId}`} className="text-xs text-ink-soft">Per day</label>
+                  <input
+                    id={`limit-${r.accountId}`}
+                    type="number"
+                    min={0}
+                    max={500}
+                    value={r.limitText}
+                    onChange={(e) => setRows((prev) => prev.map((x, j) => (j === i ? { ...x, limitText: e.target.value } : x)))}
+                    className="input-sm w-20"
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={saveSenders} disabled={sendersBusy} className="btn-primary">
+              {sendersBusy && <SpinnerIcon />} Save limits
+            </button>
+            <span aria-live="polite" className={`text-sm ${sendersNote?.ok ? "text-accent-deep" : "text-red-700"}`}>{sendersNote?.text}</span>
+          </div>
+        </Card>
+      )}
+
+      {/* 4. Schedule */}
       {configured && (
-        <Card title="Today" icon={<SparkleIcon className="h-5 w-5 text-accent" />}>
+        <Card title="Daily schedule" icon={<SparkleIcon className="h-5 w-5 text-accent" />}>
+          <p className="mb-4 text-sm leading-relaxed text-ink-soft">
+            At the time you choose, Outbox picks the next unsent addresses for every sending account, writes the emails with your prompt, and sends them
+            one by one with a pause in between. It uses the prompt from &ldquo;Your sheet&rdquo; above, so change it there.
+          </p>
+
+          <div className="grid gap-5 sm:grid-cols-[auto_150px_170px]">
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink">
+              <input type="checkbox" checked={schedEnabled} onChange={(e) => setSchedEnabled(e.target.checked)} className="h-4 w-4 accent-[#2E5D50]" />
+              Run automatically every day
+            </label>
+            <div>
+              <label htmlFor="sched-time" className="mb-1 block text-xs text-ink-soft">Start time</label>
+              <input id="sched-time" type="time" required value={schedTime} onChange={(e) => setSchedTime(e.target.value)} className="input" />
+            </div>
+            <div>
+              <label htmlFor="sched-pause" className="mb-1 block text-xs text-ink-soft">Pause between emails (seconds)</label>
+              <input id="sched-pause" type="number" min={20} max={900} value={pause} onChange={(e) => setPause(Number(e.target.value))} className="input" />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-ink-soft">
+            The time is in your timezone ({typeof window === "undefined" ? "" : timezone()}). The pause is per sending account and varies a little so it looks natural.
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => scheduleAction("save")} disabled={schedBusy !== null} className="btn-primary">
+              {schedBusy === "save" && <SpinnerIcon />} Save schedule
+            </button>
+            {savedEnabled && (
+              <>
+                <button type="button" onClick={() => scheduleAction("run")} disabled={schedBusy !== null} className="btn-secondary">
+                  {schedBusy === "run" && <SpinnerIcon />} Run today&rsquo;s schedule now
+                </button>
+                <button type="button" onClick={() => scheduleAction("cancel")} disabled={schedBusy !== null} className="btn-ghost">
+                  Cancel waiting emails
+                </button>
+              </>
+            )}
+          </div>
+
+          <div aria-live="polite" className="mt-4 space-y-3">
+            {schedNote && <Alert tone={schedNote.ok ? "ok" : "error"}>{schedNote.text}</Alert>}
+            {schedError && <Alert>Last run problem: {schedError}</Alert>}
+          </div>
+
+          {queue && queue.queued > 0 && (
+            <p className="mt-4 text-sm text-ink-soft">
+              Today: <strong className="text-ink">{queue.sent}</strong> sent, <strong className="text-ink">{queue.pending}</strong> waiting,{" "}
+              {queue.failed} failed
+              {queue.nextAt && queue.pending > 0 && <> · next at <LocalTime iso={queue.nextAt} /></>}
+            </p>
+          )}
+
+          {background.active ? (
+            <p className="mt-4 flex items-start gap-2 rounded-lg border border-accent/20 bg-accent-soft px-3.5 py-3 text-xs leading-relaxed text-accent-deep">
+              <CheckIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              Background runs are on: the server checks every few minutes, so the schedule keeps running even when your computer is off.
+            </p>
+          ) : (
+            <p className="mt-4 flex items-start gap-2 rounded-lg border border-amber/40 bg-amber-soft px-3.5 py-3 text-xs leading-relaxed text-amber">
+              <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Background runs are not set up yet, so the schedule only runs while this page is open.{" "}
+                {background.isAdmin ? (
+                  <a href="/admin/scheduler" className="font-medium underline underline-offset-2">Set it up (one time)</a>
+                ) : (
+                  "Ask the site admin to turn them on."
+                )}
+              </span>
+            </p>
+          )}
+        </Card>
+      )}
+
+      {/* 5. Button batch */}
+      {configured && (
+        <Card title="Send a batch now" icon={<SendIcon className="h-5 w-5 text-accent" />}>
           {statusError && <div className="mb-4"><Alert>{statusError}</Alert></div>}
 
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -461,11 +660,7 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
               </div>
             ))}
           </div>
-
-          <p className="mb-4 text-sm text-ink-soft">
-            Sent today: <strong className="text-ink">{sentToday}</strong> of {limit}
-            {tabTitle && <> · Tab: <span className="text-ink">{tabTitle}</span></>}
-          </p>
+          {tabTitle && <p className="mb-4 text-sm text-ink-soft">Tab: <span className="text-ink">{tabTitle}</span></p>}
 
           {phase !== "review" && phase !== "sending" && (
             <button type="button" onClick={prepare} disabled={busy} className="btn-primary">
@@ -483,9 +678,9 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
           <div aria-live="polite" className="mt-4 space-y-3">
             {notice && <Alert tone="ok">{notice}</Alert>}
             {batchError && <Alert>{batchError}</Alert>}
-            {reconnect === "google" && (
+            {reconnect === "google" && !setupError && !statusError && (
               <div className="space-y-2">
-                <a href="/oauth/google?sheets=1&next=/automation" className="btn-primary">Reconnect Gmail</a>
+                {reconnectLink}
                 <p className="text-xs text-ink-soft">Your prepared emails are saved. After reconnecting you can send them without writing them again.</p>
               </div>
             )}
@@ -493,35 +688,28 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
         </Card>
       )}
 
-      {/* 4. Review and send */}
+      {/* 6. Review and send */}
       {batch.length > 0 && (
         <Card title={phase === "done" ? "Results" : "Review and send"} icon={<SendIcon className="h-5 w-5 text-accent" />}>
           {phase === "done" && (
             <div className="mb-4 space-y-3">
               <Alert tone={failedCount > 0 ? "error" : "ok"}>
                 Sent {sentCount}
-                {failedCount > 0 ? `, ${failedCount} failed (they stay unticked and come back next time)` : ""}. Ticks were written to your sheet.
+                {failedCount > 0 ? `, ${failedCount} failed (they stay unmarked and come back next time)` : ""}. The sheet was updated.
               </Alert>
-              {tickFailed && (
-                <Alert>The emails went out, but the ticks couldn&rsquo;t be written. They will be added automatically next time you prepare a batch.</Alert>
-              )}
+              {tickFailed && <Alert>The emails went out, but the sheet couldn&rsquo;t be updated. It will be done automatically next time you prepare a batch.</Alert>}
             </div>
           )}
-          {draftNote && phase === "review" && (
-            <p className="mb-3 text-xs text-accent-deep">Saved batch restored (from {draftNote}). Nothing had to be written again.</p>
-          )}
-          {phase === "review" && (
-            <p className="mb-4 text-sm text-ink-soft">
-              Check the subjects and messages. Edit anything, or tick &ldquo;Skip&rdquo; to leave an address for another day.
-            </p>
-          )}
+          {draftNote && phase === "review" && <p className="mb-3 text-xs text-accent-deep">Saved batch restored (from {draftNote}). Nothing had to be written again.</p>}
+          {phase === "review" && <p className="mb-4 text-sm text-ink-soft">Check the subjects and messages. Edit anything, or tick &ldquo;Skip&rdquo; to leave an address for another day.</p>}
 
           <ul className="max-h-[640px] space-y-3 overflow-y-auto rounded-xl border border-line bg-paper p-3">
             {batch.map((b) => (
-              <li key={b.row} className={`rounded-lg border border-line bg-white p-3 ${b.skip ? "opacity-60" : ""}`}>
+              <li key={`${b.row}-${b.email}`} className={`rounded-lg border border-line bg-white p-3 ${b.skip ? "opacity-60" : ""}`}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="min-w-0 truncate text-xs text-ink-soft">
                     <span className="font-medium text-ink">{b.website ?? "no website"}</span> · {b.email} · row {b.row}
+                    {b.fromEmail && <> · from {b.fromEmail}</>}
                   </p>
                   {b.status ? (
                     <span className={`pill ${b.status === "sent" ? "border-accent/20 bg-accent-soft text-accent-deep" : "border-red-200 bg-red-50 text-red-700"}`}>
@@ -529,32 +717,13 @@ export default function AutomationPanel({ accounts, settings }: { accounts: Goog
                     </span>
                   ) : (
                     <label className="flex min-h-[32px] cursor-pointer items-center gap-2 text-xs text-ink-soft">
-                      <input
-                        type="checkbox"
-                        checked={b.skip}
-                        disabled={phase !== "review"}
-                        onChange={(e) => update(b.row, { skip: e.target.checked })}
-                        className="h-4 w-4 accent-[#2E5D50]"
-                      />
+                      <input type="checkbox" checked={b.skip} disabled={phase !== "review"} onChange={(e) => update(b.row, b.email, { skip: e.target.checked })} className="h-4 w-4 accent-[#2E5D50]" />
                       Skip
                     </label>
                   )}
                 </div>
-                <input
-                  aria-label={`Subject for ${b.email}`}
-                  value={b.subject}
-                  disabled={phase !== "review" || b.status === "sent"}
-                  onChange={(e) => update(b.row, { subject: e.target.value })}
-                  className="input-sm mb-2"
-                />
-                <textarea
-                  aria-label={`Message for ${b.email}`}
-                  rows={5}
-                  value={b.body}
-                  disabled={phase !== "review" || b.status === "sent"}
-                  onChange={(e) => update(b.row, { body: e.target.value })}
-                  className="input-sm resize-y"
-                />
+                <input aria-label={`Subject for ${b.email}`} value={b.subject} disabled={phase !== "review" || b.status === "sent"} onChange={(e) => update(b.row, b.email, { subject: e.target.value })} className="input-sm mb-2" />
+                <textarea aria-label={`Message for ${b.email}`} rows={5} value={b.body} disabled={phase !== "review" || b.status === "sent"} onChange={(e) => update(b.row, b.email, { body: e.target.value })} className="input-sm resize-y" />
               </li>
             ))}
           </ul>

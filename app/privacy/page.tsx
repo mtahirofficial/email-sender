@@ -62,7 +62,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Send history.</strong> For each message you send we keep the sender address, recipient address,
-          subject, time and whether it succeeded. <strong>We do not store the body of your messages.</strong>
+          subject, time and whether it succeeded. <strong>We do not store the body of messages you send from the compose window.</strong> Emails prepared by spreadsheet automation are kept until they are sent, and their message text is then removed.
         </li>
       </ul>
 
@@ -92,7 +92,7 @@ export default function PrivacyPage() {
 
       <h2>Service providers</h2>
       <p>
-        We rely on <strong>Supabase</strong> (authentication and database), <strong>Vercel</strong> (hosting), and
+        We rely on <strong>Supabase</strong> (authentication and database), <strong>Hostinger</strong> (hosting), and
         <strong> Google</strong> and <strong>Microsoft</strong> (the mail services you connect). They process data
         only to provide their service to us and are bound by their own privacy terms.
       </p>

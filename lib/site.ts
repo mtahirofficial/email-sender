@@ -6,7 +6,7 @@ export const SITE_DESCRIPTION =
 /** Public base URL, no trailing slash. Same variable the OAuth flows already use. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
 
-/** Shown on the legal pages when set (add NEXT_PUBLIC_CONTACT_EMAIL in Vercel). */
+/** Shown on the legal pages when set (add NEXT_PUBLIC_CONTACT_EMAIL in your hosting environment variables). */
 export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "";
 
 export const LEGAL_UPDATED = "October 15, 2026";

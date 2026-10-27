@@ -70,7 +70,20 @@ export async function writeCells(accessToken: string, id: string, title: string,
 
 export type SheetItem = { row: number; website: string | null; email: string; sent: boolean };
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL = /^[a-z0-9](?:[a-z0-9._%+-]*[a-z0-9])?@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
+
+// Scraped sheets often contain template addresses such as you@company.com.
+const PLACEHOLDER_DOMAINS = new Set(["company.com", "example.com", "yourdomain.com", "domain.com", "email.com", "test.com", "website.com", "yoursite.com"]);
+
+/** Every real-looking address in a cell, however it is separated (commas, spaces, new lines). */
+export function extractEmails(text: string): string[] {
+  const out: string[] = [];
+  for (const token of text.split(/[\s,;]+/)) {
+    const email = token.replace(/^[<(\["'\u2713]+|[>)\]"'.,;]+$/g, "").toLowerCase();
+    if (EMAIL.test(email) && !PLACEHOLDER_DOMAINS.has(email.split("@")[1]) && !out.includes(email)) out.push(email);
+  }
+  return out;
+}
 
 /** "https://www.hubspot.com/pricing" becomes "hubspot.com". */
 export function normalizeWebsite(raw: string): string | null {
@@ -84,22 +97,31 @@ export function normalizeWebsite(raw: string): string | null {
 }
 
 /**
- * A row with a website starts a group; every email below it (until the next
- * website) belongs to that website, so a blank website cell inherits the one
- * above (this also handles merged cells, which only hold a value in their first row).
- * A non-empty "sent" cell means that address is already handled.
+ * One row per website: the domain in one column, ALL its emails in another
+ * (comma separated), and a "sent" column that records which addresses were
+ * emailed ("\u2713 a@x.com, \u2713 b@x.com"). If the sent cell holds text without
+ * any address (for example "unsub"), the whole row counts as handled.
+ * An optional filter keeps only rows whose column equals a value (for example "Yes").
  */
-export function parseSheet(values: string[][], cols: { website: number; email: number; sent: number }): SheetItem[] {
+export function parseSheet(
+  values: string[][],
+  cols: { website: number; email: number; sent: number; filter?: { col: number; value: string } }
+): SheetItem[] {
   const items: SheetItem[] = [];
-  let website: string | null = null;
 
   values.forEach((row, index) => {
-    const found = normalizeWebsite(row[cols.website] ?? "");
-    if (found) website = found;
+    if (cols.filter && (row[cols.filter.col] ?? "").trim().toLowerCase() !== cols.filter.value) return;
 
-    const email = (row[cols.email] ?? "").trim();
-    if (EMAIL.test(email)) {
-      items.push({ row: index + 1, website, email, sent: Boolean((row[cols.sent] ?? "").trim()) });
+    const emails = extractEmails(row[cols.email] ?? "");
+    if (emails.length === 0) return;
+
+    const website = normalizeWebsite(row[cols.website] ?? "");
+    const sentText = (row[cols.sent] ?? "").trim();
+    const sentSet = new Set(extractEmails(sentText));
+    const rowHandled = sentText !== "" && sentSet.size === 0;
+
+    for (const email of emails) {
+      items.push({ row: index + 1, website, email, sent: rowHandled || sentSet.has(email) });
     }
   });
   return items;
