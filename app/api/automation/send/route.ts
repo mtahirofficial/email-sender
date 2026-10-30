@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { AccountAuthError, getValidAccessToken } from "@/lib/accounts";
+import { AccountAuthError, getValidAccessToken, markNeedsReconnect } from "@/lib/accounts";
 import { logEmailAttempt } from "@/lib/email-logs";
 import { AutomationError, automationErrorResponse, getSettings, getSheetsAccess, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount } from "@/lib/automation";
 
@@ -103,7 +103,10 @@ export async function POST(request: NextRequest) {
         results.push({ email: item.email, ok: true });
       } catch (err) {
         // A dead connection stops the whole request so the UI can offer "Reconnect" and keep the draft.
-        if (err instanceof AccountAuthError) throw err;
+        if (err instanceof AccountAuthError) {
+          if (err.reason === "scope") await markNeedsReconnect(supabase, item.accountId, true);
+          throw err;
+        }
         console.error("automation: send failed", err);
         await logEmailAttempt(supabase, {
           userId: user.id,

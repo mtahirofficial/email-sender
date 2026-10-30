@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin";
-import { getValidAccessToken } from "@/lib/accounts";
-import { sendGmail } from "@/lib/google";
+import { getValidAccessToken, markNeedsReconnect } from "@/lib/accounts";
+import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
 import { logEmailAttempt } from "@/lib/email-logs";
 import { getOwnedTrackingTest } from "@/lib/email-test/store";
@@ -87,6 +87,14 @@ export async function POST(request: NextRequest) {
       status: "failed",
       error: errorMessage.slice(0, 500),
     });
+
+    if (err instanceof GoogleScopeError) {
+      await markNeedsReconnect(supabase, accountId, true);
+      return NextResponse.json(
+        { error: 'Gmail has no permission to send from this account. Reconnect it and keep every box ticked on Google\'s screen, especially "Send email on your behalf".' },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json({ error: "Sending the test email failed." }, { status: 502 });
   }

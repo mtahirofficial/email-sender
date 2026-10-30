@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getValidAccessToken } from "@/lib/accounts";
-import { generateEmails, isAiConfigured } from "@/lib/ai";
-import { AI_DAILY_LIMIT, addAiUsage, getAiUsage } from "@/lib/ai-usage";
+import { AccountAuthError, getValidAccessToken, markNeedsReconnect } from "@/lib/accounts";
+import { aiErrorMessage, generateEmails, isAiConfigured } from "@/lib/ai";
+import { addAiUsage, getAiAccess } from "@/lib/ai-usage";
 import { logEmailAttempt } from "@/lib/email-logs";
 import {
   assignItems, computePending, getSettings, getSheetsAccess, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount,
@@ -31,8 +31,6 @@ export function localNow(timezone: string) {
 
 /** Writes today's emails (AI) and queues them with paced send times. */
 export async function prepareDay(admin: SupabaseClient, settings: OutreachSettings): Promise<{ queued: number; note?: string }> {
-  if (!isAiConfigured()) throw new Error("AI drafting isn't set up.");
-
   const { accessToken } = await getSheetsAccess(admin, settings.user_id, settings.account_id);
   const { pool } = await computePending(admin, accessToken, settings);
   const senders = await listSenders(admin, settings.user_id);
@@ -40,18 +38,43 @@ export async function prepareDay(admin: SupabaseClient, settings: OutreachSettin
   let plan = assignItems(pool, senders, used);
   if (plan.length === 0) return { queued: 0, note: "Nothing to send: every sender is at its limit, or no unsent addresses are left." };
 
-  // Scheduled runs share the same daily AI allowance as everything else.
-  const usedAi = await getAiUsage(settings.user_id);
-  const allowance = Math.max(0, AI_DAILY_LIMIT - usedAi);
-  if (allowance === 0) throw new Error("Daily AI limit reached.");
-  plan = plan.slice(0, allowance);
+  // Scheduled runs share the same daily AI allowance as everything else. A user with their own
+  // Groq key has no allowance from Outbox (limit is null) and their emails are written with that key.
+  const access = await getAiAccess(settings.user_id);
+  if (!access.ownKey && !isAiConfigured()) throw new Error("AI drafting isn't set up.");
+  const usingOwnKey = Boolean(access.ownKey);
 
+  let note: string | undefined;
+  if (access.limit !== null) {
+    const allowance = access.remaining ?? 0;
+    if (allowance === 0) {
+      throw new Error(`Daily free AI limit reached (${access.limit} drafts a day). Add your own Groq API key in Settings to write more, or wait until tomorrow.`);
+    }
+    if (allowance < plan.length) {
+      note = `Free AI limit: only ${allowance} of ${plan.length} emails could be written today. Add your own Groq API key in Settings to write more.`;
+      plan = plan.slice(0, allowance);
+    }
+  }
+
+  // Write chunk by chunk. If the AI fails part-way, keep what is already written (so those credits
+  // are not wasted) and try the rest again later: queued addresses are skipped on the next run.
   const written: { subject: string; body: string }[] = [];
+  let usedNow = access.used;
+  let failure: unknown = null;
   for (let i = 0; i < plan.length; i += AI_BATCH) {
     const chunk = plan.slice(i, i + AI_BATCH);
-    written.push(...(await generateEmails(settings.prompt, chunk.map((p) => p.item.website))));
+    try {
+      const got = await generateEmails(settings.prompt, chunk.map((p) => p.item.website), { groqKey: access.ownKey });
+      written.push(...got);
+      await addAiUsage(settings.user_id, chunk.length, usedNow);
+      usedNow += chunk.length;
+    } catch (err) {
+      failure = err;
+      break;
+    }
   }
-  await addAiUsage(settings.user_id, plan.length, usedAi);
+  if (written.length === 0 && failure) throw new Error(aiErrorMessage(failure, usingOwnKey));
+  plan = plan.slice(0, written.length);
 
   // Space each account's emails by the pause (with a little randomness, so it looks natural).
   const nextFree = new Map<string, number>();
@@ -74,7 +97,11 @@ export async function prepareDay(admin: SupabaseClient, settings: OutreachSettin
   });
   const { error } = await admin.from("outreach_queue").insert(rows);
   if (error) throw error;
-  return { queued: rows.length };
+  if (failure) {
+    // Queued emails still go out; the schedule tries the missing ones again in 30 minutes.
+    throw new Error(`${aiErrorMessage(failure, usingOwnKey)} ${rows.length} emails are ready and will be sent; the rest will be tried again in 30 minutes.`);
+  }
+  return { queued: rows.length, note };
 }
 
 /** Sends the queued emails whose time has come, within a time budget. */
@@ -136,11 +163,17 @@ export async function sendDue(admin: SupabaseClient, settings: OutreachSettings,
       sent++;
     } catch (err) {
       console.error("scheduler: send failed", err);
+      // No "send email" permission: flag the account and stop trying it, instead of failing every email one by one.
+      const noSendPermission = err instanceof AccountAuthError && err.reason === "scope";
+      if (noSendPermission) {
+        await markNeedsReconnect(admin, q.account_id, true);
+        contexts.set(q.account_id, err);
+      }
       await logEmailAttempt(admin, {
         userId: settings.user_id, accountId: q.account_id, fromEmail: ctx.email, toEmail: q.email, subject: q.subject,
         status: "failed", error: (err instanceof Error ? err.message : "Unknown error").slice(0, 500),
       });
-      await admin.from("outreach_queue").update({ status: "failed", error: "Send failed", body: "" }).eq("id", q.id);
+      await admin.from("outreach_queue").update({ status: "failed", error: noSendPermission ? "Gmail send permission missing - reconnect the account" : "Send failed", body: "" }).eq("id", q.id);
       failed++;
     }
     await sleep(1500 + Math.random() * 2500); // never a burst

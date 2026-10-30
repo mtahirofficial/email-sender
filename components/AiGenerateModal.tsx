@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertIcon, SparkleIcon, SpinnerIcon, XIcon } from "@/components/icons";
 import type { AiPreset } from "@/content/ai-presets";
+import AiStatusNote from "@/components/AiStatusNote";
+import { useToast } from "@/components/Toaster";
 
 // The API writes at most this many drafts per request, so long recipient
 // lists are generated in sequential batches.
@@ -31,6 +33,8 @@ export default function AiGenerateModal({
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [usingOwnKey, setUsingOwnKey] = useState(false);
+  const toast = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canSeparate = recipients.length > 1;
@@ -73,8 +77,10 @@ export default function AiGenerateModal({
         if (!res.ok) throw new Error(data.error ?? "Could not generate the email.");
         items.push(...(data.items as { subject: string; body: string }[]));
         setRemaining(data.remaining ?? null);
+        setUsingOwnKey(Boolean(data.usingOwnKey));
       }
       onGenerated(wantsSeparate, items);
+      toast.success(items.length === 1 ? "Draft written with AI. You can edit it before sending." : `${items.length} drafts written with AI. Check them before sending.`);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate the email.");
@@ -202,9 +208,7 @@ export default function AiGenerateModal({
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-ink-soft">
-            {remaining !== null ? `${remaining} draft${remaining === 1 ? "" : "s"} left today` : ""}
-          </p>
+          <AiStatusNote remaining={remaining} usingOwnKey={usingOwnKey} className="max-w-[17rem]" />
           <div className="flex gap-2">
             <button type="button" onClick={onClose} disabled={loading} className="btn-ghost">
               Cancel

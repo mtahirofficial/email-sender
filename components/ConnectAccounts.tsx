@@ -81,7 +81,8 @@ export default function ConnectAccounts({
 
                 {needs && (
                   <p className="mt-2.5 text-xs leading-relaxed text-amber">
-                    This connection has expired or was removed. Reconnect to keep sending.
+                    This connection has expired, was removed, or is missing the &ldquo;Send email&rdquo; permission.
+                    Reconnect to keep sending, and keep every box ticked on Google&rsquo;s screen.
                   </p>
                 )}
 
@@ -122,6 +123,11 @@ export default function ConnectAccounts({
           </button>
         )}
       </div>
+
+      <p className="mt-3 rounded-lg bg-amber-soft/60 px-3 py-2 text-xs leading-relaxed text-amber">
+        On Google&rsquo;s screen, keep <strong>every box ticked</strong>, especially &ldquo;Send email on your behalf&rdquo;.
+        If it is unticked, Outbox can&rsquo;t send anything.
+      </p>
 
       <p className="mt-4 flex gap-2 text-xs leading-relaxed text-ink-soft">
         <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />

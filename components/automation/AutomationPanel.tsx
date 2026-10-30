@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import PresetPicker from "@/components/PresetPicker";
+import AiStatusNote from "@/components/AiStatusNote";
+import { useToast } from "@/components/Toaster";
 import LocalTime from "@/components/LocalTime";
 import { reconnectHref } from "@/lib/reconnect";
 import type { AiPreset } from "@/content/ai-presets";
@@ -101,6 +103,7 @@ export default function AutomationPanel({
   /** Whether the server-side scheduler is calling the app, so runs continue with this page closed. */
   background: { active: boolean; isAdmin: boolean };
 }) {
+  const toast = useToast();
   const sheetsAccounts = accounts.filter((a) => a.sheets_enabled);
 
   // ---- sheet setup ----
@@ -260,9 +263,11 @@ export default function AutomationPanel({
       setStats(data.stats);
       setStatusError(null);
       setSetupOk(`Imported "${data.sheetTitle}". ${data.stats.pending} email${data.stats.pending === 1 ? "" : "s"} still to send.`);
+      toast.success(`Sheet imported. ${data.stats.pending} email${data.stats.pending === 1 ? "" : "s"} still to send.`);
       void refreshStatus();
     } catch (err) {
       setSetupError(message(err, "Could not import the sheet."));
+      toast.error(message(err, "Could not import the sheet."));
       setReconnect(reconnectOf(err));
     } finally {
       setSaving(false);
@@ -277,8 +282,10 @@ export default function AutomationPanel({
         senders: rows.map((r) => ({ accountId: r.accountId, enabled: r.enabled, limit: Number(r.limitText) })),
       });
       setSendersNote({ ok: true, text: "Saved." });
+      toast.success("Sending accounts saved.");
     } catch (err) {
       setSendersNote({ ok: false, text: message(err, "Could not save.") });
+      toast.error(message(err, "Could not save the sending accounts."));
     } finally {
       setSendersBusy(false);
     }
@@ -292,17 +299,22 @@ export default function AutomationPanel({
         await api("/api/automation/schedule", "POST", { action: "save", enabled: schedEnabled, time: schedTime, pauseSeconds: pause, timezone: timezone() });
         setSavedEnabled(schedEnabled);
         setSchedNote({ ok: true, text: schedEnabled ? `Schedule saved. It runs every day at ${schedTime}.` : "Schedule turned off." });
+        toast.success(schedEnabled ? `Schedule saved. It runs every day at ${schedTime}.` : "Schedule turned off.");
       } else if (action === "run") {
         const data = await api("/api/automation/schedule", "POST", { action: "run-now" });
         setSchedNote({ ok: !data.note, text: data.note ?? `Queued ${data.prepared} email${data.prepared === 1 ? "" : "s"}. They are sent with pauses of about ${pause} seconds per account.` });
+        if (data.note) toast.info(data.note);
+        else toast.success(`Queued ${data.prepared} email${data.prepared === 1 ? "" : "s"}. They are sent with pauses between them.`);
       } else {
         await api("/api/automation/schedule", "POST", { action: "cancel" });
         setSchedNote({ ok: true, text: "Cancelled the emails that were still waiting." });
+        toast.info("Cancelled the emails that were still waiting.");
       }
       void refreshSchedule();
       void refreshStatus();
     } catch (err) {
       setSchedNote({ ok: false, text: message(err, "Something went wrong.") });
+      toast.error(message(err, "Something went wrong."));
       setReconnect(reconnectOf(err));
     } finally {
       setSchedBusy(null);
@@ -333,17 +345,32 @@ export default function AutomationPanel({
       }
 
       const written: BatchItem[] = [];
+      let aiStopped: unknown = null;
       for (let i = 0; i < items.length; i += AI_CHUNK) {
         const chunk = items.slice(i, i + AI_CHUNK);
         setProgress({ done: i, total: items.length });
-        const data = await api("/api/ai/email", "POST", { prompt: next.prompt, count: chunk.length, websites: chunk.map((c) => c.website ?? "") });
-        chunk.forEach((c, j) => written.push({ ...c, subject: data.items[j].subject, body: data.items[j].body, skip: false }));
+        try {
+          const data = await api("/api/ai/email", "POST", { prompt: next.prompt, count: chunk.length, websites: chunk.map((c) => c.website ?? "") });
+          chunk.forEach((c, j) => written.push({ ...c, subject: data.items[j].subject, body: data.items[j].body, skip: false }));
+        } catch (err) {
+          aiStopped = err; // keep what is already written: those AI credits are not thrown away
+          break;
+        }
       }
+      if (written.length === 0 && aiStopped) throw aiStopped;
       setBatch(written);
       setPhase("review");
       await saveDraft(written);
+      if (aiStopped) {
+        const text = `${message(aiStopped, "The AI stopped.")} ${written.length} of ${items.length} emails are ready to review. Prepare again later for the rest.`;
+        setBatchError(text);
+        toast.error(text);
+      } else {
+        toast.success(`${written.length} email${written.length === 1 ? "" : "s"} written. Review them, then send.`);
+      }
     } catch (err) {
       setBatchError(message(err, "Could not prepare the batch."));
+      toast.error(message(err, "Could not prepare the batch."));
       setReconnect(reconnectOf(err));
       setPhase("idle");
     } finally {
@@ -378,6 +405,7 @@ export default function AutomationPanel({
     } catch (err) {
       stoppedByError = true;
       setBatchError(message(err, "Sending stopped."));
+      toast.error(message(err, "Sending stopped."));
       setReconnect(reconnectOf(err));
     } finally {
       setProgress(null);
@@ -389,6 +417,10 @@ export default function AutomationPanel({
     } else {
       setPhase("done");
       await deleteDraft();
+      const sentNow = working.filter((b) => b.status === "sent").length;
+      const failedNow = working.filter((b) => b.status === "failed").length;
+      if (failedNow > 0) toast.error(`${sentNow} sent, ${failedNow} failed. See the list for details.`);
+      else toast.success(`${sentNow} email${sentNow === 1 ? "" : "s"} sent.`);
     }
     void refreshStatus();
   }
@@ -500,6 +532,7 @@ export default function AutomationPanel({
               <p className="mt-1.5 text-xs text-ink-soft">
                 This prompt is used for the button batch and for the daily schedule. Your instructions go to an AI provider; email addresses do not.
               </p>
+              <AiStatusNote className="mt-1.5" />
             </div>
 
             {setupError && <Alert>{setupError}</Alert>}

@@ -212,16 +212,19 @@ installs). No new environment variables are needed — it reuses
 
 ## AI drafting ("Generate with AI")
 
-1. Run `supabase/migrations_add_ai_usage.sql` in the Supabase SQL Editor.
-2. Create a free key at [console.groq.com/keys](https://console.groq.com/keys)
-   and/or [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and add
-   `GROQ_API_KEY` and/or `GEMINI_API_KEY` in your Hostinger environment variables, then redeploy. Groq is tried
-   first and Gemini is the fallback. Until a key exists the button shows "Coming soon".
+1. Run `supabase/migrations_add_ai_usage.sql` **and** `supabase/migrations_add_user_ai_keys.sql` in the Supabase SQL Editor.
+2. Create free keys at [console.groq.com/keys](https://console.groq.com/keys),
+   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and (optional)
+   [console.mistral.ai](https://console.mistral.ai) and add `GROQ_API_KEY`, `GEMINI_API_KEY` and/or
+   `MISTRAL_API_KEY` in your Hostinger environment variables, then redeploy. Several Groq models are tried one
+   after the other (each has its own free quota), then Gemini, then Mistral. A model that is rate limited is
+   skipped for a while. Until a key exists the button shows "Coming soon".
 3. On Compose, **Generate with AI** opens a dialog. Tick "Write a different
    message for each recipient" to get one editable version per recipient.
 
-Keys stay on the server. Each account may generate `AI_DAILY_LIMIT` drafts
-per day (default 200) so one user can't use up the shared free quota. Models
+Keys stay on the server. Each account may write `AI_DAILY_LIMIT` drafts per day with the shared free AI
+(default 40, sized for about 20 users on the free tiers) so one user can't use up the shared quota. A user who
+adds their own Groq key under **Settings > AI writing** is written for with that key only and has no Outbox limit. Models
 are detected automatically from each provider, because they retire models often;
 leave `GROQ_MODEL` and `GEMINI_MODEL` blank unless you want to force one. Free-tier limits and data policies change, so check them.
 
@@ -247,7 +250,7 @@ counts as "already handled".
 3. In the app, Automation > **Enable Google Sheets** (one extra Google consent
    for the connected Gmail account), then import the sheet link.
 4. Sending uses the connected Gmail account, so keep each day's number inside
-   Gmail's limits. `AI_DAILY_LIMIT` (default 200) must be at least that number.
+   Gmail's limits. `AI_DAILY_LIMIT` (default 40) is the free shared AI allowance; people who need more add their own Groq key in Settings.
 
 Notes: the Sheets scope is a sensitive Google scope, so beyond test users it needs
 Google's app verification (like `gmail.send`). Every send is recorded in the
@@ -292,7 +295,7 @@ Needs a Hostinger plan with Node.js apps (Business web hosting, or Cloud). Names
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL` (your
    real https domain, no trailing slash), `NEXT_PUBLIC_CONTACT_EMAIL`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_CLIENT_ID`,
    `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` (optional), `GROQ_API_KEY` and/or
-   `GEMINI_API_KEY`, `CRON_SECRET`, and optionally `ADMIN_EMAIL`, `AI_DAILY_LIMIT`.
+   `GEMINI_API_KEY`, `MISTRAL_API_KEY` (optional), `CRON_SECRET`, and optionally `ADMIN_EMAIL`, `AI_DAILY_LIMIT`.
 3. Deploy. Then change every address that pointed at the old site to the new domain: Supabase Authentication > URL
    Configuration (Site URL and `/auth/callback`), the Google OAuth redirect `https://DOMAIN/oauth/google/callback`
    and the Microsoft one `https://DOMAIN/oauth/microsoft/callback`.

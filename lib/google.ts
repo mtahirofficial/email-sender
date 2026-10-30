@@ -10,6 +10,36 @@ function redirectUri() {
 
 /** Builds the URL that starts the "Connect Gmail" consent flow. */
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
+/**
+ * Google lets people untick single permissions on its consent screen, so a
+ * token can come back without the "send email" permission. If Google gives no
+ * scope text at all we can't tell, so that counts as fine.
+ */
+export function hasGmailSendScope(scope?: string | null) {
+  if (!scope || !scope.trim()) return true;
+  return scope.split(/\s+/).includes(GMAIL_SEND_SCOPE);
+}
+
+/** Thrown by sendGmail when Google says the token has no permission to send. */
+export class GoogleScopeError extends Error {}
+
+/**
+ * Asks Google which permissions an access token really has.
+ * true / false when Google answers, null when it can't be checked right now.
+ */
+export async function googleTokenHasSendScope(accessToken: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { scope?: string };
+    if (!data.scope) return null;
+    return data.scope.split(/\s+/).includes(GMAIL_SEND_SCOPE);
+  } catch {
+    return null;
+  }
+}
 
 /** `withSheets` additionally asks for Google Sheets access (used only by the automation feature). */
 export function getGoogleAuthUrl(state: string, withSheets = false) {
@@ -19,7 +49,7 @@ export function getGoogleAuthUrl(state: string, withSheets = false) {
     response_type: "code",
     // gmail.send only lets this app send mail — it cannot read the inbox.
     scope: [
-      "https://www.googleapis.com/auth/gmail.send",
+      GMAIL_SEND_SCOPE,
       "https://www.googleapis.com/auth/userinfo.email",
       ...(withSheets ? [SHEETS_SCOPE] : []),
     ].join(" "),
@@ -127,7 +157,12 @@ export async function sendGmail(
   });
 
   if (!res.ok) {
-    throw new Error(`Gmail send failed: ${await res.text()}`);
+    const text = await res.text();
+    // The token works but was never given the "send email" permission.
+    if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {
+      throw new GoogleScopeError(`Gmail send failed: ${text}`);
+    }
+    throw new Error(`Gmail send failed: ${text}`);
   }
   return res.json();
 }

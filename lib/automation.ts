@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { AccountAuthError, accountErrorInfo, getValidAccessToken, listConnectedAccounts, type Provider } from "@/lib/accounts";
-import { sendGmail } from "@/lib/google";
+import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
 import { SheetsError, colIndex, parseSheet, readValues, writeCells, type SheetItem } from "@/lib/sheets";
 
@@ -204,6 +204,13 @@ export async function sendViaAccount(
   subject: string,
   body: string
 ) {
-  if (ctx.provider === "google") await sendGmail(ctx.accessToken, { fromEmail: ctx.email, to, subject, body });
-  else await sendOutlookMail(ctx.accessToken, { to, subject, body });
+  if (ctx.provider === "google") {
+    try {
+      await sendGmail(ctx.accessToken, { fromEmail: ctx.email, to, subject, body });
+    } catch (err) {
+      // No "send email" permission: report it as an account problem so the UI offers Reconnect.
+      if (err instanceof GoogleScopeError) throw new AccountAuthError("scope", ctx.provider, ctx.email, err.message);
+      throw err;
+    }
+  } else await sendOutlookMail(ctx.accessToken, { to, subject, body });
 }

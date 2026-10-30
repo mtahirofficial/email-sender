@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { accountErrorInfo, getValidAccessToken } from "@/lib/accounts";
-import { sendGmail } from "@/lib/google";
+import { AccountAuthError, accountErrorInfo, getValidAccessToken, markNeedsReconnect } from "@/lib/accounts";
+import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
 import { logEmailAttempt } from "@/lib/email-logs";
 
@@ -152,6 +152,13 @@ export async function POST(request: NextRequest) {
         status: "failed",
         error: errorMessage.slice(0, 500),
       });
+
+      // No "send email" permission: every other recipient would fail the same way, so stop and offer Reconnect.
+      if (err instanceof GoogleScopeError) {
+        await markNeedsReconnect(supabase, accountId, true);
+        const info = accountErrorInfo(new AccountAuthError("scope", "google", fromEmail, errorMessage));
+        return NextResponse.json({ error: info.message, reconnect: info.reconnect }, { status: 502 });
+      }
 
       results.push({ to, ok: false, error: "Send failed" });
     }

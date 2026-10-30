@@ -5,6 +5,7 @@ import { toHeaderUser } from "@/lib/header-user";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import SettingsForm from "@/components/SettingsForm";
+import AiKeyForm from "@/components/AiKeyForm";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
@@ -22,7 +23,10 @@ export default async function SettingsPage() {
       <SiteHeader initialUser={headerUser} />
       <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="mb-6 font-serif text-3xl text-ink">Settings</h1>
-        <SettingsForm user={headerUser} />
+        <div className="space-y-6">
+          <AiKeyForm />
+          <SettingsForm user={headerUser} />
+        </div>
       </main>
       <SiteFooter />
     </>

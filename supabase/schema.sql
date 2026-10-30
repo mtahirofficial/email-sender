@@ -188,6 +188,17 @@ create table if not exists public.ai_usage (
 -- No policies on purpose: only the server (service role) reads or writes this table.
 alter table public.ai_usage enable row level security;
 
+-- A user's own AI key (Groq), stored encrypted. Only the server (service role) can read it.
+create table if not exists public.user_ai_keys (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  provider text not null default 'groq',
+  api_key text not null,
+  key_hint text,
+  created_at timestamptz not null default now()
+);
+alter table public.user_ai_keys enable row level security;
+
+
 -- ---- Outreach automation ----
 -- Google Sheets outreach automation. Safe to run more than once.
 

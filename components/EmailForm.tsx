@@ -7,6 +7,7 @@ import AiGenerateModal from "@/components/AiGenerateModal";
 import { reconnectHref } from "@/lib/reconnect";
 import type { AiPreset } from "@/content/ai-presets";
 import { AlertIcon, CheckIcon, InfoIcon, SendIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
+import { useToast } from "@/components/Toaster";
 
 type SendResult = {
   ok: boolean;
@@ -48,6 +49,7 @@ export default function EmailForm({
   draftKey: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("");
@@ -195,6 +197,15 @@ export default function EmailForm({
     setSending(false);
     setResult(data);
     router.refresh();
+
+    // A pop-up as well as the result card, so it is noticed even when the card is off-screen.
+    if (typeof data.sentCount === "number") {
+      const all = data.sentCount + (data.failedCount ?? 0);
+      if (data.failedCount) toast.error(`Sent ${data.sentCount} of ${all}. ${data.failedCount} failed, see details below.`);
+      else toast.success(`${data.sentCount} email${data.sentCount === 1 ? "" : "s"} sent.`);
+    } else if (typeof data.error === "string") {
+      toast.error(data.error);
+    }
 
     if (res.ok && data.ok) {
       setTo("");

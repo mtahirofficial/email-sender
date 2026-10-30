@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { MAX_DRAFTS_PER_REQUEST, generateEmails, isAiConfigured } from "@/lib/ai";
-import { AI_DAILY_LIMIT, addAiUsage, getAiUsage } from "@/lib/ai-usage";
+import { MAX_DRAFTS_PER_REQUEST, aiErrorMessage, generateEmails, isAiConfigured } from "@/lib/ai";
+import { addAiUsage, getAiAccess, type AiAccess } from "@/lib/ai-usage";
 
 // Generating several emails can take a while on the free tier.
 export const maxDuration = 60;
@@ -12,10 +12,6 @@ export async function POST(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-
-  if (!isAiConfigured()) {
-    return NextResponse.json({ error: "AI drafting isn't set up yet." }, { status: 503 });
-  }
 
   const body = await request.json().catch(() => null);
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
@@ -37,9 +33,9 @@ export async function POST(request: NextRequest) {
     contexts = body.websites.map((w: unknown) => (typeof w === "string" && w.trim() ? w.trim().slice(0, 100) : null));
   }
 
-  let used: number;
+  let access: AiAccess;
   try {
-    used = await getAiUsage(user.id);
+    access = await getAiAccess(user.id);
   } catch (err) {
     console.error("ai usage lookup failed", err);
     return NextResponse.json(
@@ -47,19 +43,33 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-  if (used + count > AI_DAILY_LIMIT) {
-    const left = Math.max(0, AI_DAILY_LIMIT - used);
+  // Without a key of their own, people share the app's free AI, so each gets a daily allowance.
+  if (!access.ownKey && !isAiConfigured()) {
+    return NextResponse.json({ error: "AI drafting isn't set up yet." }, { status: 503 });
+  }
+  if (access.limit !== null && access.used + count > access.limit) {
+    const left = access.remaining ?? 0;
     return NextResponse.json(
-      { error: `Daily AI limit reached. You have ${left} email${left === 1 ? "" : "s"} left today.` },
+      {
+        error: `Daily free AI limit reached (${access.limit} drafts a day). You have ${left} left today. Want more? Add your own free Groq API key in Settings and your drafts are written with your key.`,
+        limitReached: true,
+      },
       { status: 429 }
     );
   }
 
   try {
-    const items = await generateEmails(prompt, contexts);
-    await addAiUsage(user.id, count, used);
-    return NextResponse.json({ ok: true, items, remaining: Math.max(0, AI_DAILY_LIMIT - used - count) });
-  } catch {
-    return NextResponse.json({ error: "The AI is busy right now. Please try again in a minute." }, { status: 502 });
+    const items = await generateEmails(prompt, contexts, { groqKey: access.ownKey });
+    await addAiUsage(user.id, count, access.used);
+    return NextResponse.json({
+      ok: true,
+      items,
+      // null when the person's own key is used: Outbox puts no daily limit on it.
+      remaining: access.limit === null ? null : Math.max(0, access.limit - access.used - count),
+      usingOwnKey: Boolean(access.ownKey),
+    });
+  } catch (err) {
+    console.error("ai: generation failed", err);
+    return NextResponse.json({ error: aiErrorMessage(err, Boolean(access.ownKey)) }, { status: 502 });
   }
 }

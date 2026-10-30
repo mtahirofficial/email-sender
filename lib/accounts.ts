@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { encryptToken, decryptToken } from "@/lib/token-crypto";
-import { refreshGoogleAccessToken } from "@/lib/google";
+import { googleTokenHasSendScope, refreshGoogleAccessToken } from "@/lib/google";
 import { refreshMicrosoftAccessToken } from "@/lib/microsoft";
 
 export type Provider = "google" | "microsoft";
@@ -88,7 +88,7 @@ export async function listConnectedAccounts(
   throw lastError;
 }
 
-async function markNeedsReconnect(supabase: SupabaseClient, accountId: string, value: boolean) {
+export async function markNeedsReconnect(supabase: SupabaseClient, accountId: string, value: boolean) {
   await supabase.from("connected_accounts").update({ needs_reconnect: value }).eq("id", accountId); // best effort
 }
 
@@ -105,8 +105,14 @@ export async function refreshAccountHealth(
   return Promise.all(
     accounts.map(async (account) => {
       try {
-        await getValidAccessToken(supabase, userId, account.id);
-        if (account.needs_reconnect) await markNeedsReconnect(supabase, account.id, false);
+        const ctx = await getValidAccessToken(supabase, userId, account.id);
+        if (account.needs_reconnect) {
+          // A token can work and still lack the "send email" permission, so check that before clearing the flag.
+          if (ctx.provider === "google" && (await googleTokenHasSendScope(ctx.accessToken)) !== true) {
+            return { ...account, needs_reconnect: true };
+          }
+          await markNeedsReconnect(supabase, account.id, false);
+        }
         return { ...account, needs_reconnect: false };
       } catch (err) {
         const broken = err instanceof AccountAuthError && (err.reason === "revoked" || err.reason === "decrypt");
@@ -133,7 +139,7 @@ export async function deleteConnectedAccount(
  * Returns a valid (non-expired) access token for a connected account,
  * transparently refreshing and persisting it if it's expired or about to expire.
  */
-export type AccountErrorReason = "revoked" | "decrypt" | "config" | "other";
+export type AccountErrorReason = "revoked" | "decrypt" | "config" | "scope" | "other";
 
 /** Thrown when a connected account's saved credentials can't be turned into a working access token. */
 export class AccountAuthError extends Error {
@@ -169,6 +175,11 @@ export function accountErrorInfo(err: unknown): { message: string; reconnect?: P
     case "decrypt":
       return {
         message: `The saved login details for ${err.email} can't be read, because the server's encryption key changed. Disconnect this account and connect it again.`,
+        reconnect: err.provider,
+      };
+    case "scope":
+      return {
+        message: `${who} did not give Outbox permission to send email from ${err.email}. Reconnect it, and on ${who}'s screen keep every box ticked, especially "Send email on your behalf".`,
         reconnect: err.provider,
       };
     case "config":

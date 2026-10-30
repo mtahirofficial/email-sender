@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { exchangeGoogleCode, getGoogleUserEmail } from "@/lib/google";
+import { exchangeGoogleCode, getGoogleUserEmail, hasGmailSendScope } from "@/lib/google";
 import { saveConnectedAccount } from "@/lib/accounts";
 
 export async function GET(request: NextRequest) {
@@ -51,6 +51,20 @@ export async function GET(request: NextRequest) {
 
     // Google lets people untick individual permissions, so check what was really granted.
     const sheetsFlow = request.cookies.get("google_oauth_sheets")?.value === "1";
+
+    // Without the "send email" permission every send would fail later, so don't save a broken connection.
+    if (!hasGmailSendScope(tokens.scope)) {
+      const message =
+        'Google did not give Outbox permission to send email. Connect again and keep every box ticked on Google\'s screen, especially "Send email on your behalf".';
+      const failed = NextResponse.redirect(
+        new URL(`${sheetsFlow ? "/automation" : "/compose"}?error=${encodeURIComponent(message)}`, appUrl)
+      );
+      failed.cookies.delete("google_oauth_state");
+      failed.cookies.delete("google_oauth_sheets");
+      failed.cookies.delete("google_oauth_next");
+      return failed;
+    }
+
     const sheetsGranted = (tokens.scope ?? "").includes("/auth/spreadsheets");
 
     await saveConnectedAccount(supabase, {

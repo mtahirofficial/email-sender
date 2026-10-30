@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toHeaderUser } from "@/lib/header-user";
 import { listConnectedAccounts, refreshAccountHealth } from "@/lib/accounts";
 import { isAiConfigured } from "@/lib/ai";
+import { getUserKeyHint } from "@/lib/ai-keys";
 import { getAiPresets } from "@/lib/ai-presets";
 import ConnectAccounts from "@/components/ConnectAccounts";
 import EmailForm from "@/components/EmailForm";
@@ -49,7 +50,7 @@ export default async function ComposePage() {
                 <SheetIcon className="h-4 w-4 text-accent" /> Automate from a sheet
               </Link>
             </div>
-            <EmailForm accounts={accounts} aiEnabled={isAiConfigured()} presets={presets} draftKey={user.id} />
+            <EmailForm accounts={accounts} aiEnabled={isAiConfigured() || (await getUserKeyHint(user.id)).hasKey} presets={presets} draftKey={user.id} />
           </div>
         </div>
       </main>
