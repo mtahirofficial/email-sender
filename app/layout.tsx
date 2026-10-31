@@ -3,6 +3,7 @@ import { Inter, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 import ToastProvider from "@/components/Toaster";
+import SessionGuard from "@/components/SessionGuard";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -47,7 +48,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to main content
         </a>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <SessionGuard />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

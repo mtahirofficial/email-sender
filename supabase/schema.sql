@@ -373,3 +373,6 @@ create table if not exists public.scheduler_heartbeat (
 
 -- No policies on purpose: only the server (service role) reads or writes it.
 alter table public.scheduler_heartbeat enable row level security;
+
+-- "Also send on Saturday" for the daily schedule (off by default; Sunday is always skipped).
+alter table public.outreach_settings add column if not exists send_saturday boolean not null default false;

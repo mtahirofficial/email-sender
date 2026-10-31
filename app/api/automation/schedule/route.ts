@@ -47,10 +47,14 @@ export async function POST(request: NextRequest) {
         if (!Number.isInteger(pause) || pause < 20 || pause > 900) throw new AutomationError("The pause must be between 20 and 900 seconds.");
         const timezone = typeof body.timezone === "string" && body.timezone ? body.timezone : settings.timezone;
 
-        const { error } = await supabase
-          .from("outreach_settings")
-          .update({ schedule_enabled: body.enabled === true, schedule_time: time, pause_seconds: pause, timezone, schedule_error: null, schedule_retry_at: null })
-          .eq("user_id", user.id);
+        const fields = { schedule_enabled: body.enabled === true, schedule_time: time, pause_seconds: pause, timezone, schedule_error: null, schedule_retry_at: null };
+        const sendSaturday = body.sendSaturday === true;
+        let { error } = await supabase.from("outreach_settings").update({ ...fields, send_saturday: sendSaturday }).eq("user_id", user.id);
+        if (error && /send_saturday/i.test(error.message ?? "")) {
+          // the column does not exist yet (migration not run): saving still works, Saturday just stays off
+          if (sendSaturday) throw new AutomationError("To send on Saturday, run supabase/migrations_add_send_saturday.sql in the Supabase SQL Editor first.");
+          ({ error } = await supabase.from("outreach_settings").update(fields).eq("user_id", user.id));
+        }
         if (error) throw error;
         return NextResponse.json({ ok: true });
       }

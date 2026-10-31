@@ -26,7 +26,24 @@ export function localNow(timezone: string) {
     // unknown timezone: fall back to UTC below
   }
   const [h, m] = hhmm.split(":").map(Number);
-  return { day: todayIn(timezone), minutes: h * 60 + m };
+
+  // 0 = Sunday ... 6 = Saturday, in the user's timezone
+  let weekday = new Date().getUTCDay();
+  try {
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(new Date());
+    const index = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+    if (index >= 0) weekday = index;
+  } catch {
+    // unknown timezone: UTC weekday
+  }
+  return { day: todayIn(timezone), minutes: h * 60 + m, weekday };
+}
+
+/** The daily schedule skips weekends: Sunday never, Saturday unless "Also send on Saturday" is ticked. */
+export function sendsOnWeekday(settings: { send_saturday?: boolean }, weekday: number) {
+  if (weekday === 0) return false;
+  if (weekday === 6) return Boolean(settings.send_saturday);
+  return true;
 }
 
 /** Writes today's emails (AI) and queues them with paced send times. */
@@ -198,11 +215,12 @@ export async function runTickForUser(admin: SupabaseClient, userId: string, opts
 
   let prepared = 0;
   let note: string | undefined;
-  const { day, minutes } = localNow(settings.timezone);
+  const { day, minutes, weekday } = localNow(settings.timezone);
   const [h, m] = settings.schedule_time.split(":").map(Number);
   const retryOk = !settings.schedule_retry_at || new Date(settings.schedule_retry_at) <= new Date();
 
-  const due = opts.force || (settings.last_scheduled_day !== day && minutes >= h * 60 + m && retryOk);
+  // "Run now" (force) is the user's own request, so only the automatic daily run skips weekends.
+  const due = opts.force || (sendsOnWeekday(settings, weekday) && settings.last_scheduled_day !== day && minutes >= h * 60 + m && retryOk);
 
   let claimed = false;
   if (due) {

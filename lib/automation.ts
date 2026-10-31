@@ -19,6 +19,7 @@ export type OutreachSettings = {
   timezone: string;
   schedule_enabled: boolean;
   schedule_time: string; // HH:MM in `timezone`
+  send_saturday?: boolean; // also run on Saturdays (Sundays are always skipped)
   pause_seconds: number;
   last_scheduled_day: string | null;
   schedule_retry_at: string | null;

@@ -22,6 +22,7 @@ export type SettingsView = {
   filter_value: string | null;
   prompt: string;
   schedule_enabled: boolean;
+  send_saturday?: boolean;
   schedule_time: string;
   pause_seconds: number;
 };
@@ -135,6 +136,7 @@ export default function AutomationPanel({
 
   // ---- schedule ----
   const [schedEnabled, setSchedEnabled] = useState(settings?.schedule_enabled ?? false);
+  const [sendSaturday, setSendSaturday] = useState(settings?.send_saturday ?? false);
   const [savedEnabled, setSavedEnabled] = useState(settings?.schedule_enabled ?? false);
   const [schedTime, setSchedTime] = useState(settings?.schedule_time ?? "10:00");
   const [pause, setPause] = useState(settings?.pause_seconds ?? 90);
@@ -302,10 +304,11 @@ export default function AutomationPanel({
     setSchedNote(null);
     try {
       if (action === "save") {
-        await api("/api/automation/schedule", "POST", { action: "save", enabled: schedEnabled, time: schedTime, pauseSeconds: pause, timezone: timezone() });
+        await api("/api/automation/schedule", "POST", { action: "save", enabled: schedEnabled, time: schedTime, pauseSeconds: pause, timezone: timezone(), sendSaturday });
         setSavedEnabled(schedEnabled);
-        setSchedNote({ ok: true, text: schedEnabled ? `Schedule saved. It runs every day at ${schedTime}.` : "Schedule turned off." });
-        toast.success(schedEnabled ? `Schedule saved. It runs every day at ${schedTime}.` : "Schedule turned off.");
+        const days = sendSaturday ? "Monday to Saturday" : "Monday to Friday";
+        setSchedNote({ ok: true, text: schedEnabled ? `Schedule saved. It runs ${days} at ${schedTime}.` : "Schedule turned off." });
+        toast.success(schedEnabled ? `Schedule saved. It runs ${days} at ${schedTime}.` : "Schedule turned off.");
       } else if (action === "run") {
         const data = await api("/api/automation/schedule", "POST", { action: "run-now" });
         setSchedNote({ ok: !data.note, text: data.note ?? `Queued ${data.prepared} email${data.prepared === 1 ? "" : "s"}. They are sent with pauses of about ${pause} seconds per account.` });
@@ -628,10 +631,16 @@ export default function AutomationPanel({
           </p>
 
           <div className="grid gap-5 sm:grid-cols-[auto_150px_170px]">
-            <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink">
-              <input type="checkbox" checked={schedEnabled} onChange={(e) => setSchedEnabled(e.target.checked)} className="h-4 w-4 accent-[#2E5D50]" />
-              Run automatically every day
-            </label>
+            <div>
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink">
+                <input type="checkbox" checked={schedEnabled} onChange={(e) => setSchedEnabled(e.target.checked)} className="h-4 w-4 accent-[#2E5D50]" />
+                Run automatically every day
+              </label>
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-ink">
+                <input type="checkbox" checked={sendSaturday} onChange={(e) => setSendSaturday(e.target.checked)} className="h-4 w-4 accent-[#2E5D50]" />
+                Also send on Saturday
+              </label>
+            </div>
             <div>
               <label htmlFor="sched-time" className="mb-1 block text-xs text-ink-soft">Start time</label>
               <input id="sched-time" type="time" required value={schedTime} onChange={(e) => setSchedTime(e.target.value)} className="input" />
@@ -642,7 +651,7 @@ export default function AutomationPanel({
             </div>
           </div>
           <p className="mt-2 text-xs text-ink-soft">
-            The time is in your timezone ({typeof window === "undefined" ? "" : timezone()}). The pause is per sending account and varies a little so it looks natural.
+            Weekends are skipped: Sunday always, Saturday unless the box above is ticked. The time is in your timezone ({typeof window === "undefined" ? "" : timezone()}). The pause is per sending account and varies a little so it looks natural.
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">

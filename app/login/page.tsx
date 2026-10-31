@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -12,6 +12,12 @@ const BENEFITS = [
   "Send-only access. Your inbox stays private",
 ];
 
+/** Where to go after signing in: the page they were on (only paths inside this site), else the home page. */
+function nextPath() {
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -22,6 +28,12 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<{ type: "error" | "info"; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("expired")) {
+      setStatus({ type: "info", message: "Your session ended. Please sign in again." });
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,7 +47,7 @@ export default function LoginPage() {
         setStatus({ type: "error", message: error.message });
         return;
       }
-      router.push("/");
+      router.push(nextPath());
       router.refresh();
     } else {
       const { error } = await supabase.auth.signUp({

@@ -51,6 +51,7 @@ export default async function AutomationPage() {
         prompt: s.prompt,
         schedule_enabled: Boolean(s.schedule_enabled),
         schedule_time: s.schedule_time ?? "10:00",
+        send_saturday: Boolean(s.send_saturday),
         pause_seconds: s.pause_seconds ?? 90,
       };
     }
