@@ -6,6 +6,11 @@ export const alt = "Outbox: send email from your own Gmail or Outlook address";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
+// Draw the image when it is requested instead of while building. The build-time render crashes with
+// "TypeError: Invalid URL" inside Next's image library when `next build` runs on Windows (Next 14.2.x).
+// On the server (Linux) it works the same either way; link-preview sites cache the result.
+export const dynamic = "force-dynamic";
+
 export default function OpengraphImage() {
   const logo = `data:image/png;base64,${readFileSync(path.join(process.cwd(), "public", "logo-512.png")).toString("base64")}`;
 

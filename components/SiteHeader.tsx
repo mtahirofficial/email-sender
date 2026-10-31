@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { hasSessionCookieString } from "@/lib/supabase/session-cookie";
 import type { HeaderUser } from "@/lib/header-user";
 import {
+  CheckIcon,
   ChevronDownIcon,
   FlaskIcon,
   InboxIcon,
@@ -31,6 +32,7 @@ const MEMBER_LINKS = [
   { href: "/compose", label: "Compose", Icon: SendIcon },
   { href: "/sent", label: "Sent", Icon: InboxIcon },
   { href: "/automation", label: "Automation", Icon: SheetIcon },
+  { href: "/verify", label: "Verify", Icon: CheckIcon },
 ];
 
 const ADMIN_LINKS = [

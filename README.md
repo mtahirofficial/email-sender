@@ -228,6 +228,19 @@ adds their own Groq key under **Settings > AI writing** is written for with that
 are detected automatically from each provider, because they retire models often;
 leave `GROQ_MODEL` and `GEMINI_MODEL` blank unless you want to force one. Free-tier limits and data policies change, so check them.
 
+## Email verifier (/verify)
+
+Checks whether addresses are real **without sending anything**: syntax, disposable domains, MX lookup, then an SMTP
+`RCPT TO` probe (the connection is closed before any message), plus a catch-all test. Code: `lib/email-verify.ts`,
+API: `app/api/verify-emails`, page: `app/verify`.
+
+- It needs **outbound port 25**. Most shared hosting blocks it (results then say "unknown" and the page shows a
+  warning); a VPS normally allows it. Nothing else to install: it uses Node's built-in `dns` and `net`.
+- Set `VERIFY_HELO_HOST` to a real domain that points at the server (default: the domain of `NEXT_PUBLIC_APP_URL`).
+- Each account may check `VERIFY_DAILY_LIMIT` addresses a day (default 300; kept in memory, resets on restart) and at
+  most `VERIFY_CONCURRENCY` checks run at once (default 5), so your server's IP is not hammered and blacklisted.
+- "Valid" means the mail server accepted the address. Outlook and Yahoo often accept everything or refuse to answer.
+
 ## Spreadsheet automation (Google Sheets)
 
 Link a sheet of websites and addresses, set an emails-per-day number, and each
