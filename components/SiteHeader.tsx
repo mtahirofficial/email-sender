@@ -6,10 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { hasSessionCookieString } from "@/lib/supabase/session-cookie";
 import type { HeaderUser } from "@/lib/header-user";
 import {
-  CheckIcon,
-  ChevronDownIcon,
   FlaskIcon,
-  InboxIcon,
   LogOutIcon,
   Logo,
   MailIcon,
@@ -30,9 +27,7 @@ const PUBLIC_LINKS = [
 
 const MEMBER_LINKS = [
   { href: "/compose", label: "Compose", Icon: SendIcon },
-  { href: "/sent", label: "Sent", Icon: InboxIcon },
   { href: "/automation", label: "Automation", Icon: SheetIcon },
-  { href: "/verify", label: "Verify", Icon: CheckIcon },
 ];
 
 const ADMIN_LINKS = [
@@ -95,11 +90,9 @@ function AccountMenu({ user, onSignedOut }: { user: HeaderUser; onSignedOut: () 
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-[44px] items-center gap-2 rounded-full py-1 pl-1 pr-2.5 transition-colors hover:bg-mist"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-1 transition-colors hover:bg-mist"
       >
         <Avatar user={user} />
-        <span className="hidden max-w-[140px] truncate text-sm text-ink sm:inline">{display}</span>
-        <ChevronDownIcon className={`h-4 w-4 text-ink-soft transition-transform ${open ? "rotate-180" : ""}`} />
         <span className="sr-only">Account menu</span>
       </button>
 
@@ -141,7 +134,7 @@ function AccountMenu({ user, onSignedOut }: { user: HeaderUser; onSignedOut: () 
 
 /**
  * One header for the whole site. Public links are always shown; Compose and
- * Sent appear once signed in; admin tools live in the account menu and are
+ * Automation appear (as icons next to the avatar) once signed in; admin tools live in the account menu and are
  * only rendered for the admin. Pages that already know the user pass
  * `initialUser`; static pages leave it out and the header looks the user up
  * after load, so those pages can stay fully static.
@@ -183,18 +176,12 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
           {l.label}
         </Link>
       ))}
-      {user &&
-        MEMBER_LINKS.map(({ href, label, Icon }) => (
-          <Link key={href} href={href} aria-current={isActive(href) ? "page" : undefined} className={linkClass(isActive(href))}>
-            <Icon className="h-4 w-4" /> {label}
-          </Link>
-        ))}
     </>
   );
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur supports-[backdrop-filter]:bg-paper/75">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+      <div className="w-full px-4 sm:px-6">
         <div className="flex items-center justify-between gap-4 py-2">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2.5" aria-label="Outbox home">
@@ -210,7 +197,23 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
             {user === undefined ? (
               <span aria-hidden="true" className="block h-8 w-24" />
             ) : user ? (
-              <AccountMenu user={user} onSignedOut={() => setFetched(null)} />
+              <>
+                {MEMBER_LINKS.map(({ href, label, Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    aria-label={label}
+                    title={label}
+                    aria-current={isActive(href) ? "page" : undefined}
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${
+                      isActive(href) ? "bg-accent-soft text-accent-deep" : "text-ink-soft hover:bg-mist hover:text-ink"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </Link>
+                ))}
+                <AccountMenu user={user} onSignedOut={() => setFetched(null)} />
+              </>
             ) : (
               <>
                 <Link href="/login" className="btn-secondary">Sign in</Link>

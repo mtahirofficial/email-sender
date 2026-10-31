@@ -66,6 +66,62 @@ export async function writeCells(accessToken: string, id: string, title: string,
   });
 }
 
+// ---- link and colouring -----------------------------------------------------
+
+const tabIdCache = new Map<string, number>();
+
+/** Numeric id of a tab (the "gid" in a sheet link), found by its title and remembered. */
+export async function resolveTabId(accessToken: string, id: string, title: string): Promise<number | null> {
+  const key = `${id}:${title}`;
+  const cached = tabIdCache.get(key);
+  if (cached !== undefined) return cached;
+  const data = await sheetsFetch(accessToken, `${BASE}/${id}?fields=sheets.properties(sheetId,title)`);
+  const tab = (data.sheets ?? []).map((s: { properties: { sheetId: number; title: string } }) => s.properties).find((p: { title: string }) => p.title === title);
+  if (!tab) return null;
+  tabIdCache.set(key, tab.sheetId);
+  return tab.sheetId;
+}
+
+/** A link that opens the spreadsheet on the right tab. Falls back to the plain link if the tab can't be found. */
+export async function sheetUrlFor(accessToken: string, id: string, title: string): Promise<string> {
+  const base = `https://docs.google.com/spreadsheets/d/${id}/edit`;
+  try {
+    const gid = await resolveTabId(accessToken, id, title);
+    return gid === null ? base : `${base}#gid=${gid}`;
+  } catch {
+    return base;
+  }
+}
+
+const SENT_GREEN = { red: 0.78, green: 0.94, blue: 0.8 };
+
+/**
+ * Makes the "sent" cell of the given rows green and removes the green from every other row of that column
+ * (row 1 is treated as a header and left alone). Calling it with today's rows keeps exactly today's emails green.
+ */
+export async function paintSentCells(accessToken: string, id: string, title: string, col: string, rows: number[]) {
+  const sheetId = await resolveTabId(accessToken, id, title);
+  if (sheetId === null) return;
+  const c = colIndex(col);
+  const requests: unknown[] = [
+    { repeatCell: { range: { sheetId, startRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 }, cell: {}, fields: "userEnteredFormat.backgroundColor" } },
+  ];
+  const sorted = Array.from(new Set(rows)).filter((r) => r >= 2).sort((a, b) => a - b);
+  for (let i = 0; i < sorted.length; ) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++; // one request per run of neighbouring rows
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: sorted[i] - 1, endRowIndex: sorted[j], startColumnIndex: c, endColumnIndex: c + 1 },
+        cell: { userEnteredFormat: { backgroundColor: SENT_GREEN } },
+        fields: "userEnteredFormat.backgroundColor",
+      },
+    });
+    i = j + 1;
+  }
+  await sheetsFetch(accessToken, `${BASE}/${id}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests }) });
+}
+
 // ---- parsing ---------------------------------------------------------------
 
 export type SheetItem = { row: number; website: string | null; email: string; sent: boolean };

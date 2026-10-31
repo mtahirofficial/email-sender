@@ -41,6 +41,9 @@ type BatchItem = {
 };
 type Phase = "idle" | "preparing" | "review" | "sending" | "done";
 
+// The "only rows where column ... equals ..." inputs are hidden for now. Their saved values still apply.
+const SHOW_ROW_FILTER = false;
+
 const AI_CHUNK = 8; // emails written per AI request
 const SEND_CHUNK = 10; // emails sent per request
 
@@ -108,9 +111,10 @@ export default function AutomationPanel({
 
   // ---- sheet setup ----
   const [accountId, setAccountId] = useState(settings?.account_id ?? sheetsAccounts[0]?.id ?? "");
+  const [sheetLink, setSheetLink] = useState(settings ? `https://docs.google.com/spreadsheets/d/${settings.spreadsheet_id}/edit` : "");
   const [sheetUrl, setSheetUrl] = useState(settings ? `https://docs.google.com/spreadsheets/d/${settings.spreadsheet_id}/edit` : "");
   const [cols, setCols] = useState({ website: settings?.website_col ?? "B", email: settings?.email_col ?? "E", sent: settings?.sent_col ?? "F" });
-  const [filter, setFilter] = useState({ col: settings ? settings.filter_col ?? "" : "D", value: settings ? settings.filter_value ?? "" : "Yes" });
+  const [filter, setFilter] = useState({ col: settings ? settings.filter_col ?? "" : "D", value: settings ? settings.filter_value ?? "" : "" });
   const [prompt, setPrompt] = useState(settings?.prompt ?? "");
   const [saving, setSaving] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -155,6 +159,7 @@ export default function AutomationPanel({
       const data = await api("/api/automation/status", "GET");
       if (data.configured) {
         setStats(data.stats);
+        if (typeof data.sheetUrl === "string") setSheetLink(data.sheetUrl);
         setUsed(data.used ?? {});
         setStatusError(null);
       }
@@ -260,6 +265,7 @@ export default function AutomationPanel({
       });
       setConfigured(true);
       setTabTitle(data.sheetTitle);
+      setSheetLink(sheetUrl);
       setStats(data.stats);
       setStatusError(null);
       setSetupOk(`Imported "${data.sheetTitle}". ${data.stats.pending} email${data.stats.pending === 1 ? "" : "s"} still to send.`);
@@ -431,6 +437,11 @@ export default function AutomationPanel({
   const toSend = batch.filter((b) => !b.skip && b.status !== "sent").length;
   const sentCount = batch.filter((b) => b.status === "sent").length;
   const failedCount = batch.filter((b) => b.status === "failed").length;
+  const sheetButton = sheetLink ? (
+    <a href={sheetLink} target="_blank" rel="noopener noreferrer" className="btn-secondary min-h-[40px] px-3.5 text-sm">
+      <SheetIcon className="h-4 w-4" /> Open sheet
+    </a>
+  ) : null;
   const busy = phase === "preparing" || phase === "sending";
   const reconnectLink = (
     <a href="/oauth/google?sheets=1&next=/automation" className="btn-primary">
@@ -499,6 +510,7 @@ export default function AutomationPanel({
                   </div>
                 ))}
               </div>
+              {SHOW_ROW_FILTER && (
               <div className="mt-3 grid grid-cols-[90px_1fr] gap-3">
                 <div>
                   <label htmlFor="filter-col" className="mb-1 block text-xs text-ink-soft">Only rows where column</label>
@@ -509,6 +521,7 @@ export default function AutomationPanel({
                   <input id="filter-value" value={filter.value} onChange={(e) => setFilter((f) => ({ ...f, value: e.target.value }))} className="input" placeholder="Yes" />
                 </div>
               </div>
+              )}
               <p className="mt-1.5 text-xs text-ink-soft">
                 One row per website, with all its emails in one cell. After an email is sent, <span className="font-medium text-ink">✓ address</span> is added to the
                 sent column of that row. Obvious placeholders such as you@company.com are skipped.
@@ -537,6 +550,7 @@ export default function AutomationPanel({
 
             {setupError && <Alert>{setupError}</Alert>}
             {setupOk && <Alert tone="ok">{setupOk}</Alert>}
+            {configured && sheetButton && <div>{sheetButton}</div>}
             {reconnect === "google" && (setupError || statusError) && reconnectLink}
 
             <button type="submit" disabled={saving} className="btn-primary">
@@ -602,6 +616,12 @@ export default function AutomationPanel({
       {/* 4. Schedule */}
       {configured && (
         <Card title="Daily schedule" icon={<SparkleIcon className="h-5 w-5 text-accent" />}>
+          {sheetButton && (
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              {sheetButton}
+              <span className="text-xs text-ink-soft">Addresses emailed today are green in the sheet until the next day&rsquo;s sending starts.</span>
+            </div>
+          )}
           <p className="mb-4 text-sm leading-relaxed text-ink-soft">
             At the time you choose, Outbox picks the next unsent addresses for every sending account, writes the emails with your prompt, and sends them
             one by one with a pause in between. It uses the prompt from &ldquo;Your sheet&rdquo; above, so change it there.
@@ -730,6 +750,12 @@ export default function AutomationPanel({
                 Sent {sentCount}
                 {failedCount > 0 ? `, ${failedCount} failed (they stay unmarked and come back next time)` : ""}. The sheet was updated.
               </Alert>
+              {sheetButton && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {sheetButton}
+                  <span className="text-xs text-ink-soft">Today&rsquo;s sent emails are green in the sheet until the next day&rsquo;s batch starts sending.</span>
+                </div>
+              )}
               {tickFailed && <Alert>The emails went out, but the sheet couldn&rsquo;t be updated. It will be done automatically next time you prepare a batch.</Alert>}
             </div>
           )}

@@ -4,7 +4,7 @@ import { aiErrorMessage, generateEmails, isAiConfigured } from "@/lib/ai";
 import { addAiUsage, getAiAccess } from "@/lib/ai-usage";
 import { logEmailAttempt } from "@/lib/email-logs";
 import {
-  assignItems, computePending, getSettings, getSheetsAccess, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount,
+  assignItems, computePending, getSettings, getSheetsAccess, highlightSentToday, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount,
   type OutreachSettings,
 } from "@/lib/automation";
 
@@ -183,6 +183,7 @@ export async function sendDue(admin: SupabaseClient, settings: OutreachSettings,
     try {
       const { accessToken } = await getSheetsAccess(admin, settings.user_id, settings.account_id);
       await markSent(accessToken, settings, sentEmails);
+      await highlightSentToday(accessToken, admin, settings);
     } catch (err) {
       console.error("scheduler: could not mark the sheet (it is back-filled next time)", err); // sends are recorded in the database
     }

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { AccountAuthError, accountErrorInfo, getValidAccessToken, listConnectedAccounts, type Provider } from "@/lib/accounts";
 import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
-import { SheetsError, colIndex, parseSheet, readValues, writeCells, type SheetItem } from "@/lib/sheets";
+import { SheetsError, colIndex, paintSentCells, parseSheet, readValues, writeCells, type SheetItem } from "@/lib/sheets";
 
 export type OutreachSettings = {
   user_id: string;
@@ -105,6 +105,27 @@ export async function markSent(accessToken: string, settings: SheetColumns, emai
     return { row, text: [existing, ...list.map((e) => `\u2713 ${e}`)].filter(Boolean).join(", ") };
   });
   await writeCells(accessToken, settings.spreadsheet_id, settings.sheet_title, settings.sent_col, entries);
+}
+
+/**
+ * Colours the sent cell green for every address emailed today, and clears older green. So green always means
+ * "sent today" and stays until the first send of the next day. A failure here never affects sending.
+ */
+export async function highlightSentToday(accessToken: string, supabase: SupabaseClient, settings: OutreachSettings) {
+  try {
+    const { data } = await supabase
+      .from("outreach_sends")
+      .select("email")
+      .eq("user_id", settings.user_id)
+      .eq("spreadsheet_id", settings.spreadsheet_id)
+      .eq("sent_day", todayIn(settings.timezone));
+    const sentToday = new Set((data ?? []).map((d) => (d.email as string).toLowerCase()));
+    const { items } = await loadSheet(accessToken, settings);
+    const rows = items.filter((i) => sentToday.has(i.email)).map((i) => i.row);
+    await paintSentCells(accessToken, settings.spreadsheet_id, settings.sheet_title, settings.sent_col, rows);
+  } catch (err) {
+    console.error("automation: could not colour the sheet", err);
+  }
 }
 
 export type SheetStats = { total: number; websites: number; sent: number; pending: number };

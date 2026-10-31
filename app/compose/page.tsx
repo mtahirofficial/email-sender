@@ -13,7 +13,7 @@ import AlertBanner from "@/components/AlertBanner";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import Link from "next/link";
-import { SheetIcon } from "@/components/icons";
+import { InboxIcon, SheetIcon } from "@/components/icons";
 
 export const metadata: Metadata = { title: "Compose", robots: { index: false, follow: false } };
 
@@ -35,6 +35,11 @@ export default async function ComposePage() {
 
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="sr-only">Compose email</h1>
+        <div className="mb-4 flex justify-end">
+          <Link href="/sent" className="btn-secondary min-h-[40px] px-3.5 text-sm">
+            <InboxIcon className="h-4 w-4" /> Sent emails
+          </Link>
+        </div>
         <Suspense fallback={null}>
           <AlertBanner />
         </Suspense>

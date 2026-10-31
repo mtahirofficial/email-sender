@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
@@ -7,6 +8,7 @@ import { getHeartbeat, isHeartbeatFresh } from "@/lib/scheduler";
 import { toHeaderUser } from "@/lib/header-user";
 import { getSettings, listSenders } from "@/lib/automation";
 import { getAiPresets } from "@/lib/ai-presets";
+import { InboxIcon } from "@/components/icons";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import AlertBanner from "@/components/AlertBanner";
@@ -63,7 +65,12 @@ export default async function AutomationPage() {
     <>
       <SiteHeader initialUser={toHeaderUser(user)} />
       <main id="main" className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <h1 className="font-serif text-3xl text-ink">Automation</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-serif text-3xl text-ink">Automation</h1>
+          <Link href="/sent" className="btn-secondary min-h-[40px] px-3.5 text-sm">
+            <InboxIcon className="h-4 w-4" /> Sent emails
+          </Link>
+        </div>
         <p className="mb-6 mt-1 max-w-2xl text-sm leading-relaxed text-ink-soft">
           Link a Google Sheet of websites and email addresses. Outbox writes a subject and message for every address with AI and sends them
           from your connected accounts, either when you press a button or automatically every day, and marks each address in your sheet.

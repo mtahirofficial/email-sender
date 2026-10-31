@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AccountAuthError, getValidAccessToken, markNeedsReconnect } from "@/lib/accounts";
 import { logEmailAttempt } from "@/lib/email-logs";
-import { AutomationError, automationErrorResponse, getSettings, getSheetsAccess, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount } from "@/lib/automation";
+import { AutomationError, automationErrorResponse, getSettings, getSheetsAccess, highlightSentToday, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount } from "@/lib/automation";
 
 export const maxDuration = 60;
 
@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
     try {
       const { accessToken } = await getSheetsAccess(supabase, user.id, settings.account_id);
       await markSent(accessToken, settings, sentEmails);
+      await highlightSentToday(accessToken, supabase, settings);
     } catch (err) {
       console.error("automation: could not mark the sheet", err);
       tickFailed = sentEmails.length > 0;

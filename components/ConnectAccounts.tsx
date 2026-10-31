@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import { MailIcon, PlusIcon, ShieldIcon, UsersIcon } from "@/components/icons";
@@ -16,6 +16,14 @@ export default function ConnectAccounts({
 }) {
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmGoogle, setConfirmGoogle] = useState(false);
+
+  useEffect(() => {
+    if (!confirmGoogle) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setConfirmGoogle(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmGoogle]);
 
   async function disconnect(accountId: string) {
     setRemovingId(accountId);
@@ -109,9 +117,9 @@ export default function ConnectAccounts({
       )}
 
       <div className="mt-4 flex flex-col gap-2">
-        <a href="/oauth/google" className="btn-secondary">
+        <button type="button" onClick={() => setConfirmGoogle(true)} className="btn-secondary">
           <PlusIcon className="h-4 w-4" /> Connect Gmail
-        </a>
+        </button>
         {microsoftEnabled ? (
           <a href="/oauth/microsoft" className="btn-secondary">
             <PlusIcon className="h-4 w-4" /> Connect Outlook
@@ -124,15 +132,32 @@ export default function ConnectAccounts({
         )}
       </div>
 
-      <p className="mt-3 rounded-lg bg-amber-soft/60 px-3 py-2 text-xs leading-relaxed text-amber">
-        On Google&rsquo;s screen, keep <strong>every box ticked</strong>, especially &ldquo;Send email on your behalf&rdquo;.
-        If it is unticked, Outbox can&rsquo;t send anything.
-      </p>
-
       <p className="mt-4 flex gap-2 text-xs leading-relaxed text-ink-soft">
         <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
         Send-only access. Outbox can&rsquo;t read your inbox.
       </p>
+
+      {confirmGoogle && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && setConfirmGoogle(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="connect-gmail-title" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lift">
+            <h3 id="connect-gmail-title" className="font-serif text-lg text-ink">
+              Before you connect Gmail
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+              On Google&rsquo;s screen, keep <strong className="text-ink">every box ticked</strong>, especially &ldquo;Send email on your behalf&rdquo;. If it is
+              unticked, Outbox can&rsquo;t send anything.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirmGoogle(false)} className="btn-ghost">
+                Cancel
+              </button>
+              <a href="/oauth/google" autoFocus className="btn-primary" onClick={() => setConfirmGoogle(false)}>
+                Continue
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
