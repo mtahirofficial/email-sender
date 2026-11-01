@@ -376,3 +376,6 @@ alter table public.scheduler_heartbeat enable row level security;
 
 -- "Also send on Saturday" for the daily schedule (off by default; Sunday is always skipped).
 alter table public.outreach_settings add column if not exists send_saturday boolean not null default false;
+
+-- Live sending log: when a queued email was picked up for sending.
+alter table public.outreach_queue add column if not exists sending_at timestamptz;

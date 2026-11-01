@@ -228,6 +228,13 @@ adds their own Groq key under **Settings > AI writing** is written for with that
 are detected automatically from each provider, because they retire models often;
 leave `GROQ_MODEL` and `GEMINI_MODEL` blank unless you want to force one. Free-tier limits and data policies change, so check them.
 
+## Sending log (Automation page)
+
+A live log of today's emails, grouped by the address they are sent from (`components/automation/SendLog.tsx`, data from
+`/api/automation/log`). The next email of each sender has a see-through countdown bar, an email being sent pulses, a sent one
+says "Sent". It is read from the database, so it survives a refresh. Run `supabase/migrations_add_send_log.sql` once
+(adds `outreach_queue.sending_at`); without it everything still works, only the "Sending..." moment is not shown.
+
 ## Spreadsheet automation (Google Sheets)
 
 Link a sheet of websites and addresses, set an emails-per-day number, and each

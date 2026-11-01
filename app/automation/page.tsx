@@ -13,6 +13,7 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import AlertBanner from "@/components/AlertBanner";
 import AutomationPanel, { type GoogleAccount, type SettingsView } from "@/components/automation/AutomationPanel";
+import SendLog from "@/components/automation/SendLog";
 
 export const metadata: Metadata = { title: "Automation", robots: { index: false, follow: false } };
 
@@ -95,6 +96,7 @@ export default async function AutomationPage() {
           presets={presets}
           background={{ active: isHeartbeatFresh(lastTickAt), isAdmin: isAdminUser(user) }}
         />
+        {settings && <SendLog />}
       </main>
       <SiteFooter />
     </>

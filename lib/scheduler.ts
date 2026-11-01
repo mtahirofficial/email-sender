@@ -144,13 +144,12 @@ export async function sendDue(admin: SupabaseClient, settings: OutreachSettings,
 
     // Claim the row first, so two ticks (cron and an open page) can never both send it.
     // If this process dies, the row simply becomes due again after 10 minutes.
-    const { data: claimed } = await admin
-      .from("outreach_queue")
-      .update({ send_after: new Date(Date.now() + 10 * 60 * 1000).toISOString() })
-      .eq("id", q.id)
-      .eq("status", "pending")
-      .lte("send_after", new Date().toISOString())
-      .select("id");
+    const claim = (fields: Record<string, unknown>) =>
+      admin.from("outreach_queue").update(fields).eq("id", q.id).eq("status", "pending").lte("send_after", new Date().toISOString()).select("id");
+    const bumped = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    // sending_at lets the live log show "Sending..."; if that column isn't there yet, claim without it.
+    const firstTry = await claim({ send_after: bumped, sending_at: new Date().toISOString() });
+    const claimed = firstTry.error && /sending_at/i.test(firstTry.error.message ?? "") ? (await claim({ send_after: bumped })).data : firstTry.data;
     if (!claimed || claimed.length === 0) continue;
 
     let ctx = contexts.get(q.account_id);
