@@ -12,6 +12,8 @@ export type ConnectedAccount = {
   /** True once Google/Microsoft stopped accepting the saved connection. */
   needs_reconnect?: boolean;
   sheets_enabled?: boolean;
+  /** True once the person allowed Outbox to read replies (Gmail only). */
+  inbox_enabled?: boolean;
 };
 
 /** Inserts or updates a connected sender account after a successful OAuth flow. */
@@ -26,6 +28,8 @@ export async function saveConnectedAccount(
     expiresInSeconds: number;
     /** Google only: whether the token also carries Google Sheets access. */
     sheetsEnabled?: boolean;
+    /** Google only: whether the token also lets Outbox read replies. */
+    inboxEnabled?: boolean;
   }
 ) {
   const expiresAt = new Date(Date.now() + params.expiresInSeconds * 1000).toISOString();
@@ -62,6 +66,14 @@ export async function saveConnectedAccount(
       .eq("provider", params.provider)
       .eq("email", params.email);
   }
+  if (params.inboxEnabled !== undefined) {
+    await supabase
+      .from("connected_accounts")
+      .update({ inbox_enabled: params.inboxEnabled })
+      .eq("user_id", params.userId)
+      .eq("provider", params.provider)
+      .eq("email", params.email);
+  }
 }
 
 /** Lists a user's connected sender accounts (no tokens included). */
@@ -71,6 +83,7 @@ export async function listConnectedAccounts(
 ): Promise<ConnectedAccount[]> {
   // Newer columns first; fall back so an older database keeps working.
   const attempts = [
+    "id, provider, email, needs_reconnect, sheets_enabled, inbox_enabled",
     "id, provider, email, needs_reconnect, sheets_enabled",
     "id, provider, email, sheets_enabled",
     "id, provider, email",

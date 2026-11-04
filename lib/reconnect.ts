@@ -3,12 +3,13 @@
  * Sheets access must keep asking for it, or automation would silently stop.
  */
 export function reconnectHref(
-  account: { provider: string; sheets_enabled?: boolean },
+  account: { provider: string; sheets_enabled?: boolean; inbox_enabled?: boolean },
   next = "/compose"
 ) {
   if (account.provider !== "google") return "/oauth/microsoft";
   const params = new URLSearchParams();
   if (account.sheets_enabled) params.set("sheets", "1");
+  if (account.inbox_enabled) params.set("inbox", "1");
   params.set("next", next);
   return `/oauth/google?${params.toString()}`;
 }

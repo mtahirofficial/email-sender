@@ -7,6 +7,7 @@ import { hasSessionCookieString } from "@/lib/supabase/session-cookie";
 import type { HeaderUser } from "@/lib/header-user";
 import {
   FlaskIcon,
+  InboxIcon,
   LogOutIcon,
   Logo,
   MailIcon,
@@ -28,6 +29,7 @@ const PUBLIC_LINKS = [
 const MEMBER_LINKS = [
   { href: "/compose", label: "Compose", Icon: SendIcon },
   { href: "/automation", label: "Automation", Icon: SheetIcon },
+  { href: "/inbox", label: "Inbox", Icon: InboxIcon },
 ];
 
 const ADMIN_LINKS = [

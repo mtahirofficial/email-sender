@@ -134,7 +134,7 @@ export default function ConnectAccounts({
 
       <p className="mt-4 flex gap-2 text-xs leading-relaxed text-ink-soft">
         <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-        Send-only access. Outbox can&rsquo;t read your inbox.
+        Connecting only needs permission to send. Reading replies is separate and optional: you turn it on later in the Inbox.
       </p>
 
       {confirmGoogle && (

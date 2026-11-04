@@ -70,14 +70,24 @@ export default function PrivacyPage() {
       <p>
         We request the narrowest permissions needed. For Gmail this is <strong>gmail.send</strong> (send email on
         your behalf) and your account email address. For Outlook this is <strong>Mail.Send</strong>,
-        <strong> User.Read</strong> and <strong>offline_access</strong>. {SITE_NAME} cannot read, search, modify or
-        delete the messages in your mailbox.
+        <strong> User.Read</strong> and <strong>offline_access</strong>. Unless you turn on the optional Inbox
+        (below), {SITE_NAME} cannot read or search your mailbox, and it never modifies or deletes messages.
       </p>
       <p>
         If you turn on spreadsheet automation we also request <strong>Google Sheets</strong> access
         (<strong>spreadsheets</strong>). Google words this permission as access to your spreadsheets, but {SITE_NAME}
         reads and writes only the sheet you link: it reads the websites and addresses, and writes a &ldquo;sent&rdquo;
         mark next to addresses it has emailed. This permission is optional and is requested separately from sending mail.
+      </p>
+      <p>
+        If you turn on the <strong>Inbox</strong> for a Gmail account we also request <strong>gmail.readonly</strong>.
+        Google cannot limit this permission to replies, but {SITE_NAME} only looks for replies to emails it sent for you.
+        We store, per person you emailed, their address, the subject, the status of the conversation and a short
+        snippet (up to 300 characters) of their latest reply. The full text of messages is read from Gmail only when you
+        open a conversation and is <strong>not stored</strong>. When you ask for a suggested reply or follow-up, the
+        text of that conversation is sent to our AI provider (Groq) only to write that suggestion; nothing is sent
+        automatically and you review everything before it is sent. This permission is optional and you can turn it off
+        by removing {SITE_NAME} at myaccount.google.com/permissions.
       </p>
       <p>
         The content you write is passed to Google or Microsoft only to deliver the message you asked us to send.

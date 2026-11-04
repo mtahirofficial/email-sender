@@ -235,6 +235,22 @@ A live log of today's emails, grouped by the address they are sent from (`compon
 says "Sent". It is read from the database, so it survives a refresh. Run `supabase/migrations_add_send_log.sql` once
 (adds `outreach_queue.sending_at`); without it everything still works, only the "Sending..." moment is not shown.
 
+## Inbox: replies and follow-ups (/inbox)
+
+Shows replies to the emails Outbox sent (Gmail only for now), helps you understand each one and write the answer, and
+drafts follow-ups for emails nobody answered. Nothing is sent without you pressing Send; replies go out inside the same
+Gmail conversation.
+
+1. Run `supabase/migrations_add_inbox.sql` in the Supabase SQL Editor (adds `conversations`, `inbox_settings`, `connected_accounts.inbox_enabled`).
+2. In Google Cloud > OAuth consent screen > Data access, add the scope `.../auth/gmail.readonly`.
+3. Each user turns it on per Gmail account on the Inbox page ("Allow for ..."). Sending still works without it.
+
+Things to know before real users:
+- `gmail.readonly` is a **restricted** Google scope. While your app is in Testing (or unverified) you are limited to 100 test users and a warning screen. Going public needs Google's OAuth verification **and an annual third-party security assessment (CASA)**. Plan for it, or keep the Inbox for a small group.
+- Google's Limited Use rules apply to Gmail data. Mailbox text is therefore sent **only to Groq** (never Gemini or Mistral, whose free plans may train on data). Check Groq's current terms before launch. Users need `GROQ_API_KEY` on the server or their own Groq key in Settings.
+- Message text is read from Gmail when a conversation is opened and is not stored. Stored per person: address, subject, status, a 300-character snippet of the latest reply.
+- Follow-up rules (after N days, at most M) and notes for the AI are in the Inbox "Settings". Each AI draft counts as one draft of the daily AI allowance.
+
 ## Spreadsheet automation (Google Sheets)
 
 Link a sheet of websites and addresses, set an emails-per-day number, and each

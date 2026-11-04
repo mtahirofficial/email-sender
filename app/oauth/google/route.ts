@@ -15,16 +15,19 @@ export async function GET(request: NextRequest) {
 
   // ?sheets=1 also asks for Google Sheets access (spreadsheet automation).
   const withSheets = request.nextUrl.searchParams.get("sheets") === "1";
+  // ?inbox=1 also asks to read replies (the Inbox feature).
+  const withInbox = request.nextUrl.searchParams.get("inbox") === "1";
   const next = request.nextUrl.searchParams.get("next");
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
 
   const state = crypto.randomBytes(16).toString("hex");
-  const response = NextResponse.redirect(getGoogleAuthUrl(state, withSheets));
+  const response = NextResponse.redirect(getGoogleAuthUrl(state, withSheets, withInbox));
   const cookie = { httpOnly: true, secure: true, sameSite: "lax" as const, maxAge: 600, path: "/" };
 
   // Verified again in the callback to protect against CSRF.
   response.cookies.set("google_oauth_state", state, cookie);
   if (withSheets) response.cookies.set("google_oauth_sheets", "1", cookie);
+  if (withInbox) response.cookies.set("google_oauth_inbox", "1", cookie);
   if (safeNext) response.cookies.set("google_oauth_next", safeNext, cookie);
 
   return response;

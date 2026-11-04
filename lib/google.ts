@@ -11,6 +11,8 @@ function redirectUri() {
 /** Builds the URL that starts the "Connect Gmail" consent flow. */
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+// Reading replies is a separate, optional permission (Google calls it a "restricted" scope).
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 /**
  * Google lets people untick single permissions on its consent screen, so a
@@ -24,6 +26,9 @@ export function hasGmailSendScope(scope?: string | null) {
 
 /** Thrown by sendGmail when Google says the token has no permission to send. */
 export class GoogleScopeError extends Error {}
+
+/** Thrown when reading mail fails because the account did not allow Outbox to read replies. */
+export class GoogleReadScopeError extends Error {}
 
 /**
  * Asks Google which permissions an access token really has.
@@ -42,16 +47,17 @@ export async function googleTokenHasSendScope(accessToken: string): Promise<bool
 }
 
 /** `withSheets` additionally asks for Google Sheets access (used only by the automation feature). */
-export function getGoogleAuthUrl(state: string, withSheets = false) {
+export function getGoogleAuthUrl(state: string, withSheets = false, withInbox = false) {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: redirectUri(),
     response_type: "code",
-    // gmail.send only lets this app send mail — it cannot read the inbox.
+    // gmail.send only lets this app send mail. Reading replies (gmail.readonly) is asked for only when someone turns on the inbox.
     scope: [
       GMAIL_SEND_SCOPE,
       "https://www.googleapis.com/auth/userinfo.email",
       ...(withSheets ? [SHEETS_SCOPE] : []),
+      ...(withInbox ? [GMAIL_READ_SCOPE] : []),
     ].join(" "),
     access_type: "offline", // required to receive a refresh_token
     prompt: "consent", // forces Google to re-issue a refresh_token every time
@@ -118,6 +124,14 @@ function toBase64Url(input: string) {
     .replace(/=+$/, "");
 }
 
+const oneLine = (value: string) => value.replace(/[\r\n]+/g, " ").trim();
+
+/** Header text with accents or other languages must be sent as an RFC 2047 "encoded word". */
+function encodeHeader(value: string) {
+  const text = oneLine(value);
+  return /^[\x20-\x7e]*$/.test(text) ? text : `=?UTF-8?B?${Buffer.from(text, "utf8").toString("base64")}?=`;
+}
+
 /** Sends an email through the Gmail API, as the connected Gmail account. */
 export async function sendGmail(
   accessToken: string,
@@ -129,6 +143,10 @@ export async function sendGmail(
     body: string;
     /** Defaults to false (plain text) to preserve existing compose behavior. */
     isHtml?: boolean;
+    /** Sends as a reply inside an existing conversation. */
+    threadId?: string;
+    inReplyTo?: string;
+    references?: string;
   }
 ) {
   const from = opts.fromName
@@ -138,7 +156,9 @@ export async function sendGmail(
   const mime = [
     `From: ${from}`,
     `To: ${opts.to}`,
-    `Subject: ${opts.subject}`,
+    `Subject: ${encodeHeader(opts.subject)}`,
+    ...(opts.inReplyTo ? [`In-Reply-To: ${oneLine(opts.inReplyTo)}`] : []),
+    ...(opts.references ? [`References: ${oneLine(opts.references)}`] : []),
     "MIME-Version: 1.0",
     opts.isHtml
       ? 'Content-Type: text/html; charset="UTF-8"'
@@ -153,7 +173,7 @@ export async function sendGmail(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ raw: toBase64Url(mime) }),
+    body: JSON.stringify({ raw: toBase64Url(mime), ...(opts.threadId ? { threadId: opts.threadId } : {}) }),
   });
 
   if (!res.ok) {

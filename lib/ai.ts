@@ -27,6 +27,12 @@ const MISTRAL_BASE = "https://api.mistral.ai/v1";
 export type AiOptions = {
   /** The user's own Groq API key. When set, ONLY this key is used for the request. */
   groqKey?: string | null;
+  /**
+   * Use only Groq (the shared key or the user's own). Needed when the text comes from someone's mailbox:
+   * Google's Limited Use rules do not allow passing Gmail content to services that may train on it, and the
+   * free Gemini / Mistral plans may. Groq says it does not train on API data (check its current terms).
+   */
+  groqOnly?: boolean;
 };
 
 /** An HTTP error from an AI provider (rate limit, bad key, retired model ...). */
@@ -208,7 +214,7 @@ type Slot = {
   label: string;
   /** max output tokens for a request that asks for `count` emails */
   budget: (count: number) => number;
-  call: (user: string, tokens: number) => Promise<string>;
+  call: (system: string, user: string, tokens: number) => Promise<string>;
 };
 
 // Groq and Mistral count tokens per minute on small free plans, so keep each request modest.
@@ -221,7 +227,7 @@ function groqSlot(key: string, model: string): Slot {
     id: `groq:${keyTag(key)}:${model}`,
     label: `groq ${model}`,
     budget: compactBudget,
-    call: async (user, tokens) => {
+    call: async (system, user, tokens) => {
       const res = await fetch(`${GROQ_BASE}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -233,7 +239,7 @@ function groqSlot(key: string, model: string): Slot {
           // gpt-oss models reason before answering; keep it short for plain emails.
           ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: system },
             { role: "user", content: user },
           ],
         }),
@@ -248,12 +254,12 @@ function groqSlot(key: string, model: string): Slot {
 }
 
 function geminiSlot(): Slot {
-  const request = (model: string, user: string, tokens: number) =>
+  const request = (model: string, system: string, user: string, tokens: number) =>
     fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
         generationConfig: { temperature: 0.8, maxOutputTokens: tokens, responseMimeType: "application/json" },
       }),
@@ -264,9 +270,9 @@ function geminiSlot(): Slot {
     id: "gemini",
     label: "gemini",
     budget: generousBudget,
-    call: async (user, tokens) => {
-      let res = await request(await getGeminiModel(), user, tokens);
-      if (res.status === 404) res = await request(await getGeminiModel(true), user, tokens); // model retired
+    call: async (system, user, tokens) => {
+      let res = await request(await getGeminiModel(), system, user, tokens);
+      if (res.status === 404) res = await request(await getGeminiModel(true), system, user, tokens); // model retired
       if (!res.ok) throw await httpError("gemini", res);
       const data = await res.json();
       return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
@@ -275,7 +281,7 @@ function geminiSlot(): Slot {
 }
 
 function mistralSlot(): Slot {
-  const request = (model: string, user: string, tokens: number) =>
+  const request = (model: string, system: string, user: string, tokens: number) =>
     fetch(`${MISTRAL_BASE}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.MISTRAL_API_KEY}` },
@@ -285,7 +291,7 @@ function mistralSlot(): Slot {
         max_tokens: tokens,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: system },
           { role: "user", content: user },
         ],
       }),
@@ -296,9 +302,9 @@ function mistralSlot(): Slot {
     id: "mistral",
     label: "mistral",
     budget: compactBudget,
-    call: async (user, tokens) => {
-      let res = await request(await getMistralModel(), user, tokens);
-      if (res.status === 404) res = await request(await getMistralModel(true), user, tokens); // model retired
+    call: async (system, user, tokens) => {
+      let res = await request(await getMistralModel(), system, user, tokens);
+      if (res.status === 404) res = await request(await getMistralModel(true), system, user, tokens); // model retired
       if (!res.ok) throw await httpError("mistral", res);
       const data = await res.json();
       const content = data?.choices?.[0]?.message?.content;
@@ -327,6 +333,7 @@ async function buildSlots(opts: AiOptions): Promise<Slot[]> {
 
   const slots: Slot[] = [];
   if (process.env.GROQ_API_KEY) slots.push(...(await groqSlotsFor(process.env.GROQ_API_KEY, false)));
+  if (opts.groqOnly) return slots;
   if (process.env.GEMINI_API_KEY) slots.push(geminiSlot());
   if (process.env.MISTRAL_API_KEY) slots.push(mistralSlot());
   return slots;
@@ -438,7 +445,7 @@ export async function generateEmails(prompt: string, contexts: (string | null)[]
       // 1) one request for everything still missing; a bad reply is not fatal
       try {
         const remaining = contexts.slice(emails.length);
-        const got = parseAnyEmails(await slot.call(userMessage(prompt, remaining), slot.budget(remaining.length)));
+        const got = parseAnyEmails(await slot.call(SYSTEM_PROMPT, userMessage(prompt, remaining), slot.budget(remaining.length)));
         emails.push(...got.slice(0, remaining.length));
       } catch (err) {
         if (err instanceof AiHttpError) throw err; // rate limit / bad key: do not hammer the same slot
@@ -449,13 +456,35 @@ export async function generateEmails(prompt: string, contexts: (string | null)[]
       // 2) top up the rest one at a time (also acts as a retry when count is 1)
       let attempts = 0;
       while (emails.length < count && attempts++ < count + 1) {
-        const [email] = parseAnyEmails(await slot.call(userMessage(prompt, [contexts[emails.length]]), slot.budget(1)));
+        const [email] = parseAnyEmails(await slot.call(SYSTEM_PROMPT, userMessage(prompt, [contexts[emails.length]]), slot.budget(1)));
         if (email) emails.push(email);
       }
 
       if (emails.length >= count) {
         return emails.slice(0, count).map((e, i) => ({ ...e, subject: ensureWebsiteInSubject(e.subject, contexts[i]) }));
       }
+    } catch (err) {
+      console.error(`ai: ${slot.label} failed:`, err instanceof Error ? err.message : err);
+      coolDown(slot, err);
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error("AI is busy: every model is cooling down after a rate limit");
+}
+
+/**
+ * Asks the AI for one JSON answer with its own instructions (used for reading replies and writing follow-ups).
+ * Uses the same providers, rotation and cool-downs as generateEmails.
+ */
+export async function completeJson(system: string, user: string, opts: AiOptions = {}): Promise<unknown> {
+  const slots = await buildSlots(opts);
+  if (slots.length === 0) throw new Error("No AI provider configured");
+
+  let lastError: unknown;
+  for (const slot of slots) {
+    if (isCoolingDown(slot)) continue;
+    try {
+      return extractJson(await slot.call(system, user, slot.budget(2)));
     } catch (err) {
       console.error(`ai: ${slot.label} failed:`, err instanceof Error ? err.message : err);
       coolDown(slot, err);

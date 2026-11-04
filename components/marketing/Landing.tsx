@@ -10,7 +10,7 @@ import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 const STEPS = [
   {
     title: "Connect your mailbox",
-    body: "Sign in with Google or Microsoft and approve send-only access. Outbox never asks to read your mail.",
+    body: "Sign in with Google or Microsoft and approve send-only access. Reading replies is optional and stays off until you turn on the Inbox for a Gmail account.",
   },
   {
     title: "Write your message",
@@ -62,7 +62,7 @@ const FAQ = [
   },
   {
     q: "Can Outbox read my inbox?",
-    a: "No. Outbox asks only for permission to send mail (Gmail's gmail.send and Microsoft's Mail.Send) plus your address, so it can label the connection. It cannot read, search or delete your messages. If you choose to turn on spreadsheet automation, it separately asks for Google Sheets access, which is optional.",
+    a: "By default, no. Outbox asks only for permission to send mail (Gmail's gmail.send and Microsoft's Mail.Send) plus your address, so it can label the connection. Two features are optional and asked for separately: spreadsheet automation asks for Google Sheets access, and the Inbox asks for permission to read your Gmail so it can show replies to emails you sent and help you answer them. Outbox never deletes or changes anything in your mailbox.",
   },
   {
     q: "Which email accounts work?",
@@ -247,7 +247,7 @@ export default function Landing() {
           </div>
           <ul className="space-y-5">
             {[
-              ["Send-only permissions", "We request gmail.send and Mail.Send. Outbox cannot read, search or delete anything in your mailbox."],
+              ["Send-only by default", "We request gmail.send and Mail.Send. Reading replies is optional and only if you turn on the Inbox for a Gmail account. Outbox never deletes anything in your mailbox."],
               ["Encrypted at rest", "Access and refresh tokens are encrypted with AES-256-GCM before they are stored."],
               ["Isolated accounts", "Row-level security means every record is reachable only by the account that owns it."],
               ["Revoke whenever you want", "Disconnect inside Outbox, or remove access from your Google or Microsoft account's app permissions."],

@@ -61,11 +61,14 @@ export async function GET(request: NextRequest) {
       );
       failed.cookies.delete("google_oauth_state");
       failed.cookies.delete("google_oauth_sheets");
+      failed.cookies.delete("google_oauth_inbox");
       failed.cookies.delete("google_oauth_next");
       return failed;
     }
 
     const sheetsGranted = (tokens.scope ?? "").includes("/auth/spreadsheets");
+    const inboxFlow = request.cookies.get("google_oauth_inbox")?.value === "1";
+    const inboxGranted = (tokens.scope ?? "").includes("/auth/gmail.readonly");
 
     await saveConnectedAccount(supabase, {
       userId: user.id,
@@ -75,13 +78,18 @@ export async function GET(request: NextRequest) {
       refreshToken: tokens.refresh_token,
       expiresInSeconds: tokens.expires_in,
       sheetsEnabled: sheetsGranted,
+      inboxEnabled: inboxGranted,
     });
 
     const returnTo = request.cookies.get("google_oauth_next")?.value;
     const safeReturn = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : null;
 
     let destination = "/compose?connected=google";
-    if (safeReturn && (!sheetsFlow || sheetsGranted)) {
+    if (inboxFlow) {
+      destination = inboxGranted
+        ? "/inbox?connected=inbox"
+        : `/inbox?error=${encodeURIComponent("Google did not give Outbox permission to read replies. Try again and keep the permission to read your email ticked on Google's screen.")}`;
+    } else if (safeReturn && (!sheetsFlow || sheetsGranted)) {
       destination = `${safeReturn}${safeReturn.includes("?") ? "&" : "?"}connected=${sheetsFlow ? "sheets" : "google"}`;
     } else if (sheetsFlow) {
       destination = sheetsGranted
@@ -91,6 +99,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(new URL(destination, appUrl));
     response.cookies.delete("google_oauth_state");
     response.cookies.delete("google_oauth_sheets");
+    response.cookies.delete("google_oauth_inbox");
     response.cookies.delete("google_oauth_next");
     return response;
   } catch (err) {

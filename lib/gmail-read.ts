@@ -1,0 +1,206 @@
+import { GoogleReadScopeError } from "@/lib/google";
+
+// Reads replies from Gmail. Only used when the person turned on the Inbox for that account.
+// Message text is read on demand and never stored by Outbox.
+
+const API = "https://gmail.googleapis.com/gmail/v1/users/me";
+
+export class GmailApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+async function gmailGet(accessToken: string, path: string): Promise<any> {
+  const res = await fetch(`${API}${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {
+      throw new GoogleReadScopeError("This account did not allow Outbox to read replies.");
+    }
+    throw new GmailApiError(res.status, `Gmail ${res.status}: ${text.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
+// ---- text helpers ----------------------------------------------------------
+
+/** Turns "=?UTF-8?B?...?=" (and Q) header text into normal text. */
+export function decodeMimeWords(value: string): string {
+  return value.replace(/=\?([\w-]+)\?([bBqQ])\?([^?]*)\?=/g, (_m, charset: string, enc: string, text: string) => {
+    try {
+      const bytes =
+        enc.toUpperCase() === "B"
+          ? Buffer.from(text, "base64")
+          : Buffer.from(text.replace(/_/g, " ").replace(/=([0-9A-Fa-f]{2})/g, (_x, h: string) => String.fromCharCode(parseInt(h, 16))), "latin1");
+      return new TextDecoder(charset).decode(bytes);
+    } catch {
+      return text;
+    }
+  });
+}
+
+/** "Ann Lee <ann@x.com>" -> "ann@x.com" */
+export function addressOf(header: string): string {
+  const m = /<([^>]+)>/.exec(header);
+  return (m ? m[1] : header).trim().toLowerCase();
+}
+
+function fromBase64Url(data: string) {
+  return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+}
+
+function htmlToText(html: string) {
+  return html
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
+
+function collect(part: Part, kind: "text/plain" | "text/html", out: string[]) {
+  if (part.mimeType === kind && part.body?.data) out.push(fromBase64Url(part.body.data));
+  for (const child of part.parts ?? []) collect(child, kind, out);
+}
+
+/** Readable text of a message: the plain part if there is one, otherwise the HTML with tags removed. */
+export function messageText(payload: Part): string {
+  const plain: string[] = [];
+  collect(payload, "text/plain", plain);
+  if (plain.join("").trim()) return plain.join("\n");
+  const html: string[] = [];
+  collect(payload, "text/html", html);
+  return htmlToText(html.join("\n"));
+}
+
+/** Removes the quoted earlier messages and signatures noise from a reply, and cuts it to a sensible length. */
+export function stripQuoted(text: string, maxChars = 2500): string {
+  let t = text.replace(/\r\n/g, "\n");
+  const cuts = [
+    /^On [\s\S]{5,250}?wrote:\s*$/m, // "On Tue, 3 Nov 2026, Ann <a@x.com> wrote:"
+    /^-{2,}\s*Original Message\s*-{2,}/im,
+    /^From:\s.+\n(?:Sent|Date):\s/m, // Outlook style header block
+    /^_{5,}\s*$/m,
+  ];
+  for (const re of cuts) {
+    const m = re.exec(t);
+    if (m && m.index > 0) t = t.slice(0, m.index);
+  }
+  t = t
+    .split("\n")
+    .filter((line) => !line.startsWith(">"))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return t.length > maxChars ? `${t.slice(0, maxChars)}...` : t;
+}
+
+// ---- messages and threads --------------------------------------------------
+
+export type ThreadMessage = {
+  id: string;
+  labelIds: string[];
+  snippet: string;
+  at: number; // ms
+  from: string;
+  to: string;
+  subject: string;
+  messageId: string; // the Message-ID header, used to reply inside the same conversation
+  references: string;
+  text?: string;
+};
+
+type RawMessage = { id: string; labelIds?: string[]; snippet?: string; internalDate?: string; payload?: Part & { headers?: { name: string; value: string }[] } };
+
+function toMessage(raw: RawMessage, withText: boolean): ThreadMessage {
+  const h = (name: string) => raw.payload?.headers?.find((x) => x.name.toLowerCase() === name.toLowerCase())?.value ?? "";
+  return {
+    id: raw.id,
+    labelIds: raw.labelIds ?? [],
+    snippet: decodeEntities(raw.snippet ?? ""),
+    at: Number(raw.internalDate ?? 0),
+    from: decodeMimeWords(h("From")),
+    to: decodeMimeWords(h("To")),
+    subject: decodeMimeWords(h("Subject")),
+    messageId: h("Message-ID") || h("Message-Id"),
+    references: h("References"),
+    ...(withText && raw.payload ? { text: stripQuoted(messageText(raw.payload)) } : {}),
+  };
+}
+
+const decodeEntities = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+
+/** Ids of conversations that received a message (not sent by this account) in the last `days` days. */
+export async function listRecentInboundThreadIds(accessToken: string, days = 30): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let pageToken = "";
+  for (let page = 0; page < 3; page++) {
+    const q = encodeURIComponent(`newer_than:${days}d -in:sent -in:drafts`);
+    const data = await gmailGet(accessToken, `/messages?q=${q}&maxResults=500&fields=messages(threadId),nextPageToken${pageToken ? `&pageToken=${pageToken}` : ""}`);
+    for (const m of data.messages ?? []) ids.add(m.threadId);
+    if (!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+  return ids;
+}
+
+/** The conversation our first email to this address started (search in Sent). */
+export async function findOutreachThread(accessToken: string, toEmail: string, sentAtMs: number): Promise<string | null> {
+  if (!/^[^\s"'()<>,;]+@[^\s"'()<>,;]+$/.test(toEmail)) return null;
+  const after = Math.floor(sentAtMs / 1000) - 86_400;
+  const q = encodeURIComponent(`in:sent to:${toEmail} after:${after}`);
+  const data = await gmailGet(accessToken, `/messages?q=${q}&maxResults=10&fields=messages(id,threadId)`);
+  const list: { threadId: string }[] = data.messages ?? [];
+  return list.length > 0 ? list[list.length - 1].threadId : null; // newest first, so the last one is the oldest
+}
+
+const META = "format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=References";
+const FIELDS = "fields=messages(id,labelIds,snippet,internalDate,payload/headers)";
+
+export async function getThreadMeta(accessToken: string, threadId: string): Promise<ThreadMessage[]> {
+  const data = await gmailGet(accessToken, `/threads/${encodeURIComponent(threadId)}?${META}&${FIELDS}`);
+  return ((data.messages ?? []) as RawMessage[]).map((m) => toMessage(m, false)).sort((a, b) => a.at - b.at);
+}
+
+export async function getThreadFull(accessToken: string, threadId: string): Promise<ThreadMessage[]> {
+  const data = await gmailGet(accessToken, `/threads/${encodeURIComponent(threadId)}?format=full&fields=messages(id,labelIds,snippet,internalDate,payload)`);
+  return ((data.messages ?? []) as RawMessage[]).map((m) => toMessage(m, true)).sort((a, b) => a.at - b.at);
+}
+
+// ---- what happened in a conversation ---------------------------------------
+
+export type ThreadState = {
+  state: "waiting" | "replied" | "answered" | "bounced";
+  /** emails we sent after the first one, while nobody had answered */
+  followUps: number;
+  lastInbound?: ThreadMessage;
+};
+
+const isBounce = (m: ThreadMessage) => /mailer-daemon|postmaster/i.test(m.from) || /delivery status notification|undeliverable|returned mail|delivery has failed/i.test(m.subject);
+
+export function analyzeThread(messages: ThreadMessage[], accountEmail: string): ThreadState {
+  const me = accountEmail.toLowerCase();
+  const mine = (m: ThreadMessage) => m.labelIds.includes("SENT") || addressOf(m.from) === me;
+  const outbound = messages.filter(mine);
+  const inbound = messages.filter((m) => !mine(m));
+  const real = inbound.filter((m) => !isBounce(m));
+  const followUps = Math.max(0, outbound.length - 1);
+
+  if (inbound.length === 0) return { state: "waiting", followUps };
+  if (real.length === 0) return { state: "bounced", followUps, lastInbound: inbound[inbound.length - 1] };
+
+  const lastInbound = real[real.length - 1];
+  const last = messages[messages.length - 1];
+  return { state: mine(last) ? "answered" : "replied", followUps, lastInbound };
+}
