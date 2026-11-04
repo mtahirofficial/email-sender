@@ -222,7 +222,7 @@ export async function openThread(supabase: SupabaseClient, userId: string, id: s
 }
 
 /** Writes a draft: a reply to what they said, or a follow-up to silence. Costs one AI draft from the daily allowance. */
-export async function draftConversation(supabase: SupabaseClient, userId: string, id: string, kind: "reply" | "followup") {
+export async function draftConversation(supabase: SupabaseClient, userId: string, id: string, kind: "reply" | "followup", instruction = "") {
   const access = await getAiAccess(userId);
   // Mailbox text only goes to Groq (see AiOptions.groqOnly), so Groq must be available.
   if (!access.ownKey && !process.env.GROQ_API_KEY) throw new InboxError("Replies and follow-ups need a Groq key. Add your own free Groq API key in Settings.", 503, { limitReached: true });
@@ -238,12 +238,13 @@ export async function draftConversation(supabase: SupabaseClient, userId: string
 
   try {
     if (kind === "reply") {
-      const draft = await draftReply(messages, ctx.email, settings.instructions, opts);
+      const draft = await draftReply(messages, ctx.email, settings.instructions, opts, instruction);
       await addAiUsage(userId, 1, access.used);
-      await supabase.from("conversations").update({ ai_intent: draft.intent, ai_summary: draft.summary }).eq("id", id);
+      // only the "understand" button saves what the AI concluded; a message written from the person's own prompt does not
+      if (!instruction.trim()) await supabase.from("conversations").update({ ai_intent: draft.intent, ai_summary: draft.summary }).eq("id", id);
       return { kind, ...draft };
     }
-    const body = await draftFollowUp(messages, ctx.email, settings.instructions, conv.follow_up_count + 1, Math.max(1, settings.max_follow_ups), opts);
+    const body = await draftFollowUp(messages, ctx.email, settings.instructions, conv.follow_up_count + 1, Math.max(1, settings.max_follow_ups), opts, instruction);
     await addAiUsage(userId, 1, access.used);
     return { kind, body, needsReply: true, summary: "", intent: "other" };
   } catch (err) {

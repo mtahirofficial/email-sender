@@ -249,6 +249,7 @@ Things to know before real users:
 - `gmail.readonly` is a **restricted** Google scope. While your app is in Testing (or unverified) you are limited to 100 test users and a warning screen. Going public needs Google's OAuth verification **and an annual third-party security assessment (CASA)**. Plan for it, or keep the Inbox for a small group.
 - Google's Limited Use rules apply to Gmail data. Mailbox text is therefore sent **only to Groq** (never Gemini or Mistral, whose free plans may train on data). Check Groq's current terms before launch. Users need `GROQ_API_KEY` on the server or their own Groq key in Settings.
 - Message text is read from Gmail when a conversation is opened and is not stored. Stored per person: address, subject, status, a 300-character snippet of the latest reply.
+- Each connected Gmail account has its own inbox (mailbox list on the left). To answer a reply you can either press "Understand and draft reply" or open "Write with my prompt", type what you want to say, and the AI writes the message from that.
 - Follow-up rules (after N days, at most M) and notes for the AI are in the Inbox "Settings". Each AI draft counts as one draft of the daily AI allowance.
 
 ## Spreadsheet automation (Google Sheets)

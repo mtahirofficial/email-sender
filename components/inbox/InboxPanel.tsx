@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AiStatusNote from "@/components/AiStatusNote";
-import { AlertIcon, CheckIcon, SpinnerIcon, XIcon } from "@/components/icons";
+import { AlertIcon, CheckIcon, SparkleIcon, SpinnerIcon, XIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
 
 type Status = "waiting" | "replied" | "answered" | "bounced" | "closed";
@@ -83,6 +83,7 @@ export default function InboxPanel() {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [accountId, setAccountId] = useState<string | null>(null); // which mailbox is open
   const stopBulk = useRef(false);
 
   const load = useCallback(async () => {
@@ -117,6 +118,11 @@ export default function InboxPanel() {
   const hasReader = Boolean(data?.accounts.some((a) => a.provider === "google" && a.inbox_enabled));
   useEffect(() => {
     void load();
+    try {
+      setAccountId(localStorage.getItem("inbox-account"));
+    } catch {
+      // not available: start with the first mailbox
+    }
   }, [load]);
   useEffect(() => {
     if (!hasReader) return;
@@ -125,12 +131,25 @@ export default function InboxPanel() {
     return () => clearInterval(id);
   }, [hasReader, sync]);
 
-  const items = data?.items ?? [];
+  const accounts = data?.accounts ?? [];
+  const selected = accounts.find((a) => a.id === accountId) ?? accounts.find((a) => a.provider === "google" && a.inbox_enabled) ?? accounts[0] ?? null;
+  const items = (data?.items ?? []).filter((i) => i.account_id === selected?.id); // this mailbox only
   const counts = Object.fromEntries(TABS.map((t) => [t.key, items.filter((i) => inTab(i, t.key)).length])) as Record<Tab, number>;
   const list = items.filter((i) => inTab(i, tab));
-  const googleAccounts = (data?.accounts ?? []).filter((a) => a.provider === "google");
-  const accountEmail = (id: string) => data?.accounts.find((a) => a.id === id)?.email ?? "";
-  const manyAccounts = (data?.accounts.length ?? 0) > 1;
+  const stats = (accountId: string) => {
+    const mine = (data?.items ?? []).filter((i) => i.account_id === accountId);
+    return { replies: mine.filter((i) => i.status === "replied").length, due: mine.filter((i) => i.followUpDue).length };
+  };
+
+  function pick(id: string) {
+    setAccountId(id);
+    setOpenId(null);
+    try {
+      localStorage.setItem("inbox-account", id);
+    } catch {
+      // private mode: the choice just isn't remembered
+    }
+  }
 
   async function draftAll() {
     const todo = list.filter((i) => !drafts[i.id]);
@@ -169,118 +188,150 @@ export default function InboxPanel() {
     );
   }
 
+  if (accounts.length === 0) {
+    return (
+      <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">
+        The Inbox works with Gmail accounts. Connect a Gmail account on the Compose page first.
+      </p>
+    );
+  }
+
   const opened = items.find((i) => i.id === openId) ?? null;
+  const problems = syncProblems.filter((p) => p.email === selected?.email);
+  const canRead = Boolean(selected && selected.provider === "google" && selected.inbox_enabled);
 
   return (
-    <div className="space-y-5">
-      {googleAccounts.length === 0 && (
-        <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">
-          The Inbox works with Gmail accounts. Connect a Gmail account on the Compose page first.
-          {data.accounts.length > 0 && " Replies for Outlook accounts are not supported yet."}
-        </p>
-      )}
-
-      {googleAccounts.some((a) => !a.inbox_enabled) && (
-        <div className="card p-5">
-          <h2 className="font-serif text-lg text-ink">{hasReader ? "More Gmail accounts" : "Let Outbox see replies"}</h2>
-          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-            To show replies, Google asks you to allow Outbox to read your email. Outbox only looks for replies to emails it sent for you. The text of a message is read when you open it and is not stored. This is optional: sending works without it.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {googleAccounts
-              .filter((a) => !a.inbox_enabled)
-              .map((a) => (
-                <a key={a.id} href={enableHref(a)} className="btn-secondary min-h-[40px] px-3.5 text-sm">
-                  Allow for {a.email}
-                </a>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {syncProblems.map((p) => (
-        <p key={p.email} role="alert" className="flex items-start gap-2 rounded-lg border border-amber/40 bg-amber-soft px-3.5 py-2.5 text-sm text-amber">
-          <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            {p.email}: {p.error}
-          </span>
-        </p>
-      ))}
-
-      {hasReader && (
-        <div className="card p-4 sm:p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Conversations">
-              {TABS.map((t) => (
+    <div className="grid gap-5 md:grid-cols-[260px_minmax(0,1fr)]">
+      <aside aria-label="Mailboxes" className="card h-fit p-3">
+        <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">Mailboxes</p>
+        <ul className="flex gap-1 overflow-x-auto md:block md:space-y-1 md:overflow-visible">
+          {accounts.map((a) => {
+            const active = a.id === selected?.id;
+            const s = stats(a.id);
+            return (
+              <li key={a.id} className="shrink-0 md:shrink">
                 <button
-                  key={t.key}
                   type="button"
-                  role="tab"
-                  aria-selected={tab === t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`rounded-full border px-3 py-1.5 text-sm font-medium ${tab === t.key ? "border-accent bg-accent-soft text-accent-deep" : "border-line bg-white text-ink-soft hover:bg-mist"}`}
+                  onClick={() => pick(a.id)}
+                  aria-current={active ? "true" : undefined}
+                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm ${active ? "bg-accent-soft text-accent-deep" : "text-ink hover:bg-mist"}`}
                 >
-                  {t.label} <span className="text-xs">{counts[t.key]}</span>
-                </button>
-              ))}
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              {tab === "followup" && counts.followup > 0 && (
-                <>
-                  <button type="button" onClick={draftAll} disabled={bulk !== null} className="btn-primary min-h-[40px] px-3.5 text-sm">
-                    {bulk ? <SpinnerIcon /> : null} {bulk ? `Writing ${bulk.done}/${bulk.total}` : "Write all follow-ups"}
-                  </button>
-                  {bulk && (
-                    <button type="button" onClick={() => (stopBulk.current = true)} className="btn-ghost min-h-[40px] px-3 text-sm">
-                      Stop
-                    </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="block max-w-[220px] truncate font-medium md:max-w-none">{a.email}</span>
+                    <span className="block text-xs opacity-70">
+                      {a.provider !== "google" ? "Outlook: not supported yet" : !a.inbox_enabled ? "Not allowed yet" : s.due > 0 ? `${s.due} need a follow-up` : "Up to date"}
+                    </span>
+                  </span>
+                  {s.replies > 0 && (
+                    <span className="grid h-6 min-w-[24px] place-items-center rounded-full bg-accent px-1.5 text-xs font-semibold text-white" title="Replies waiting for an answer">
+                      {s.replies}
+                    </span>
                   )}
-                </>
-              )}
-              <button type="button" onClick={() => sync(true)} disabled={syncing} className="btn-secondary min-h-[40px] px-3.5 text-sm">
-                {syncing ? <SpinnerIcon /> : null} Refresh
-              </button>
-              <button type="button" onClick={() => setShowSettings((v) => !v)} className="btn-ghost min-h-[40px] px-3 text-sm" aria-expanded={showSettings}>
-                Settings
-              </button>
-            </div>
-          </div>
-
-          {showSettings && <SettingsForm settings={data.settings} onSaved={load} />}
-
-          <ul className="mt-4 divide-y divide-line">
-            {list.length === 0 && (
-              <li className="px-2 py-8 text-center text-sm text-ink-soft">
-                {tab === "replies" ? "No replies waiting for an answer." : tab === "followup" ? "Nothing needs a follow-up yet." : tab === "waiting" ? "No emails are waiting for a reply." : "Nothing here yet."}
-              </li>
-            )}
-            {list.map((item) => (
-              <li key={item.id}>
-                <button type="button" onClick={() => setOpenId(item.id)} className="block w-full rounded-lg px-2 py-3 text-left hover:bg-mist">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="min-w-0 break-all text-sm font-semibold text-ink">{item.to_email}</span>
-                    {item.ai_intent && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-deep">{INTENT[item.ai_intent] ?? item.ai_intent}</span>}
-                    {drafts[item.id] && <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium text-ink">Draft ready</span>}
-                    <span className="ml-auto text-xs text-ink-soft">{item.status === "replied" ? `Replied ${ago(item.reply_at)}` : `Sent ${ago(item.sent_at)}`}</span>
-                  </div>
-                  <p className="mt-0.5 truncate text-sm text-ink-soft">{item.status === "replied" && item.reply_snippet ? item.reply_snippet : item.subject}</p>
-                  <p className="mt-0.5 text-xs text-ink-soft">
-                    {manyAccounts && `From ${accountEmail(item.account_id)} · `}
-                    {item.status === "waiting" && `${item.follow_up_count} of ${data.settings.max_follow_ups} follow-ups sent`}
-                    {item.status === "bounced" && "The email bounced"}
-                    {item.status === "answered" && "You answered"}
-                    {item.status === "closed" && "Marked done"}
-                    {item.status === "replied" && item.subject}
-                  </p>
                 </button>
               </li>
-            ))}
-          </ul>
-          <div className="mt-3">
-            <AiStatusNote />
+            );
+          })}
+        </ul>
+      </aside>
+
+      <div className="min-w-0 space-y-5">
+        {selected && selected.provider !== "google" && (
+          <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">Replies for Outlook accounts are not supported yet. Use a Gmail account here.</p>
+        )}
+
+        {selected && selected.provider === "google" && !selected.inbox_enabled && (
+          <div className="card p-5">
+            <h2 className="font-serif text-lg text-ink">Let Outbox see replies for {selected.email}</h2>
+            <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+              To show replies, Google asks you to allow Outbox to read your email. Outbox only looks for replies to emails it sent for you. The text of a message is read when you open it and is not stored. This is optional: sending works without it.
+            </p>
+            <a href={enableHref(selected)} className="btn-secondary mt-3 min-h-[40px] px-3.5 text-sm">
+              Allow for {selected.email}
+            </a>
           </div>
-        </div>
-      )}
+        )}
+
+        {problems.map((p) => (
+          <p key={p.email} role="alert" className="flex items-start gap-2 rounded-lg border border-amber/40 bg-amber-soft px-3.5 py-2.5 text-sm text-amber">
+            <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{p.error}</span>
+          </p>
+        ))}
+
+        {canRead && (
+          <div className="card p-4 sm:p-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Conversations">
+                {TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-medium ${tab === t.key ? "border-accent bg-accent-soft text-accent-deep" : "border-line bg-white text-ink-soft hover:bg-mist"}`}
+                  >
+                    {t.label} <span className="text-xs">{counts[t.key]}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                {tab === "followup" && counts.followup > 0 && (
+                  <>
+                    <button type="button" onClick={draftAll} disabled={bulk !== null} className="btn-primary min-h-[40px] px-3.5 text-sm">
+                      {bulk ? <SpinnerIcon /> : null} {bulk ? `Writing ${bulk.done}/${bulk.total}` : "Write all follow-ups"}
+                    </button>
+                    {bulk && (
+                      <button type="button" onClick={() => (stopBulk.current = true)} className="btn-ghost min-h-[40px] px-3 text-sm">
+                        Stop
+                      </button>
+                    )}
+                  </>
+                )}
+                <button type="button" onClick={() => sync(true)} disabled={syncing} className="btn-secondary min-h-[40px] px-3.5 text-sm">
+                  {syncing ? <SpinnerIcon /> : null} Refresh
+                </button>
+                <button type="button" onClick={() => setShowSettings((v) => !v)} className="btn-ghost min-h-[40px] px-3 text-sm" aria-expanded={showSettings}>
+                  Settings
+                </button>
+              </div>
+            </div>
+
+            {showSettings && <SettingsForm settings={data.settings} onSaved={load} />}
+
+            <ul className="mt-4 divide-y divide-line">
+              {list.length === 0 && (
+                <li className="px-2 py-8 text-center text-sm text-ink-soft">
+                  {tab === "replies" ? "No replies waiting for an answer." : tab === "followup" ? "Nothing needs a follow-up yet." : tab === "waiting" ? "No emails are waiting for a reply." : "Nothing here yet."}
+                </li>
+              )}
+              {list.map((item) => (
+                <li key={item.id}>
+                  <button type="button" onClick={() => setOpenId(item.id)} className="block w-full rounded-lg px-2 py-3 text-left hover:bg-mist">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="min-w-0 break-all text-sm font-semibold text-ink">{item.to_email}</span>
+                      {item.ai_intent && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-deep">{INTENT[item.ai_intent] ?? item.ai_intent}</span>}
+                      {drafts[item.id] && <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium text-ink">Draft ready</span>}
+                      <span className="ml-auto text-xs text-ink-soft">{item.status === "replied" ? `Replied ${ago(item.reply_at)}` : `Sent ${ago(item.sent_at)}`}</span>
+                    </div>
+                    <p className="mt-0.5 truncate text-sm text-ink-soft">{item.status === "replied" && item.reply_snippet ? item.reply_snippet : item.subject}</p>
+                    <p className="mt-0.5 text-xs text-ink-soft">
+                      {item.status === "waiting" && `${item.follow_up_count} of ${data.settings.max_follow_ups} follow-ups sent`}
+                      {item.status === "bounced" && "The email bounced"}
+                      {item.status === "answered" && "You answered"}
+                      {item.status === "closed" && "Marked done"}
+                      {item.status === "replied" && item.subject}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3">
+              <AiStatusNote />
+            </div>
+          </div>
+        )}
+      </div>
 
       {opened && (
         <Conversation
@@ -382,6 +433,8 @@ function Conversation({
   const [text, setText] = useState(draft?.body ?? "");
   const [info, setInfo] = useState<{ summary?: string; intent?: string } | null>(item.ai_summary ? { summary: item.ai_summary, intent: item.ai_intent ?? undefined } : null);
   const [busy, setBusy] = useState<"" | "draft" | "send" | "status">("");
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [promptText, setPromptText] = useState("");
   const kind: "reply" | "followup" | null = item.status === "waiting" ? "followup" : item.status === "replied" || item.status === "answered" ? "reply" : null;
 
   useEffect(() => {
@@ -400,12 +453,13 @@ function Conversation({
     };
   }, [item.id]);
 
-  async function writeDraft() {
+  // instruction empty: the AI reads the reply and suggests an answer. Otherwise it writes what the person's own prompt asks for.
+  async function writeDraft(instruction = "") {
     if (!kind) return;
     setBusy("draft");
     try {
-      const d = await post<Draft>("/api/inbox/draft", { id: item.id, kind });
-      setInfo(d.summary || d.intent ? { summary: d.summary, intent: d.intent } : null);
+      const d = await post<Draft>("/api/inbox/draft", { id: item.id, kind, ...(instruction ? { instruction } : {}) });
+      if (!instruction) setInfo(d.summary || d.intent ? { summary: d.summary, intent: d.intent } : null);
       if (d.needsReply === false) {
         setText("");
         toast.info("This message does not need an answer. You can mark it done.");
@@ -508,11 +562,39 @@ function Conversation({
               <p className="text-xs text-ink-soft">The AI only suggests. Read and change the text, then press Send. It goes out inside the same conversation.</p>
             </>
           )}
+          {kind && promptOpen && (
+            <div className="rounded-xl border border-line bg-mist p-3">
+              <label htmlFor="own-prompt" className="label">
+                Your prompt
+              </label>
+              <textarea
+                id="own-prompt"
+                value={promptText}
+                onChange={(e) => setPromptText(e.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder={'Tell the AI what to say, for example: "Say yes, the price is $50, and ask for the page URL."'}
+                className="input"
+              />
+              <button
+                type="button"
+                onClick={() => writeDraft(promptText.trim())}
+                disabled={busy !== "" || !promptText.trim() || !messages}
+                className="btn-primary mt-2 min-h-[40px] px-3.5 text-sm"
+              >
+                {busy === "draft" && promptOpen ? <SpinnerIcon /> : <SparkleIcon className="h-4 w-4" />} Generate message
+              </button>
+              <p className="mt-2 text-xs text-ink-soft">The AI also reads the conversation, so you only need to say what you want to answer.</p>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {kind && (
               <>
-                <button type="button" onClick={writeDraft} disabled={busy !== "" || !messages} className="btn-secondary min-h-[40px] px-3.5 text-sm">
-                  {busy === "draft" ? <SpinnerIcon /> : null} {kind === "reply" ? "Understand and draft reply" : "Draft follow-up"}
+                <button type="button" onClick={() => writeDraft()} disabled={busy !== "" || !messages} className="btn-secondary min-h-[40px] px-3.5 text-sm">
+                  {busy === "draft" && !promptOpen ? <SpinnerIcon /> : null} {kind === "reply" ? "Understand and draft reply" : "Draft follow-up"}
+                </button>
+                <button type="button" onClick={() => setPromptOpen((v) => !v)} aria-expanded={promptOpen} className="btn-secondary min-h-[40px] px-3.5 text-sm">
+                  <SparkleIcon className="h-4 w-4" /> Write with my prompt
                 </button>
                 <button type="button" onClick={send} disabled={busy !== "" || !text.trim()} className="btn-primary min-h-[40px] px-4 text-sm">
                   {busy === "send" ? <SpinnerIcon /> : <CheckIcon className="h-4 w-4" />} Send
