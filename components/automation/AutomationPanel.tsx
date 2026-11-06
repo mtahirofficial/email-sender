@@ -20,6 +20,7 @@ export type SettingsView = {
   sent_col: string;
   filter_col: string | null;
   filter_value: string | null;
+  extra_cols?: { col: string; header: string }[];
   prompt: string;
   schedule_enabled: boolean;
   send_saturday?: boolean;
@@ -32,6 +33,7 @@ type QueueInfo = { queued: number; pending: number; sent: number; failed: number
 type BatchItem = {
   row: number;
   website: string | null;
+  fields?: Record<string, string>; // values of the extra columns for this row
   email: string;
   accountId: string;
   fromEmail: string;
@@ -40,6 +42,8 @@ type BatchItem = {
   skip: boolean;
   status?: "sent" | "failed";
 };
+type ExtraCol = { col: string; header: string };
+const MAX_EXTRA_COLUMNS = 8;
 type Phase = "idle" | "preparing" | "review" | "sending" | "done";
 
 // The "only rows where column ... equals ..." inputs are hidden for now. Their saved values still apply.
@@ -108,6 +112,23 @@ export default function AutomationPanel({
   background: { active: boolean; isAdmin: boolean };
 }) {
   const toast = useToast();
+
+  function addExtraColumn() {
+    const col = newCol.trim().toUpperCase();
+    const header = newHeader.replace(/\s+/g, " ").trim();
+    if (!/^[A-Z]$/.test(col)) return setExtraError("Type the column letter, one letter from A to Z.");
+    if (!header) return setExtraError("Type the header of that column. You will use this name in your instructions.");
+    if (header.toLowerCase() === "website") return setExtraError('"Website" is already used for the domain column. Pick another header.');
+    if ([cols.website, cols.email, cols.sent].includes(col)) return setExtraError(`Column ${col} is already used for the domain, emails or sent marks.`);
+    if (extraCols.some((e) => e.col === col)) return setExtraError(`Column ${col} is already added.`);
+    if (extraCols.some((e) => e.header.toLowerCase() === header.toLowerCase())) return setExtraError(`There is already a column called "${header}".`);
+    if (extraCols.length >= MAX_EXTRA_COLUMNS) return setExtraError(`You can add up to ${MAX_EXTRA_COLUMNS} extra columns.`);
+    setExtraCols((list) => [...list, { col, header: header.slice(0, 40) }]);
+    setNewCol("");
+    setNewHeader("");
+    setExtraError(null);
+    setAddOpen(false);
+  }
   const sheetsAccounts = accounts.filter((a) => a.sheets_enabled);
 
   // ---- sheet setup ----
@@ -117,6 +138,13 @@ export default function AutomationPanel({
   const [cols, setCols] = useState({ website: settings?.website_col ?? "B", email: settings?.email_col ?? "E", sent: settings?.sent_col ?? "F" });
   const [filter, setFilter] = useState({ col: settings ? settings.filter_col ?? "" : "D", value: settings ? settings.filter_value ?? "" : "" });
   const [prompt, setPrompt] = useState(settings?.prompt ?? "");
+  // Optional extra sheet columns: their values are given to the AI, so the prompt can use them by header.
+  const [extraCols, setExtraCols] = useState<ExtraCol[]>(settings?.extra_cols ?? []);
+  const [savedExtra, setSavedExtra] = useState(JSON.stringify(settings?.extra_cols ?? []));
+  const [addOpen, setAddOpen] = useState(false);
+  const [newCol, setNewCol] = useState("");
+  const [newHeader, setNewHeader] = useState("");
+  const [extraError, setExtraError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupOk, setSetupOk] = useState<string | null>(null);
@@ -262,10 +290,12 @@ export default function AutomationPanel({
         sentCol: cols.sent,
         filterCol: filter.col,
         filterValue: filter.value,
+        extraCols,
         prompt,
         timezone: timezone(),
       });
       setConfigured(true);
+      setSavedExtra(JSON.stringify(extraCols));
       setTabTitle(data.sheetTitle);
       setSheetLink(sheetUrl);
       setStats(data.stats);
@@ -359,7 +389,7 @@ export default function AutomationPanel({
         const chunk = items.slice(i, i + AI_CHUNK);
         setProgress({ done: i, total: items.length });
         try {
-          const data = await api("/api/ai/email", "POST", { prompt: next.prompt, count: chunk.length, websites: chunk.map((c) => c.website ?? "") });
+          const data = await api("/api/ai/email", "POST", { prompt: next.prompt, count: chunk.length, contexts: chunk.map((c) => ({ website: c.website ?? null, fields: c.fields ?? {} })) });
           chunk.forEach((c, j) => written.push({ ...c, subject: data.items[j].subject, body: data.items[j].body, skip: false }));
         } catch (err) {
           aiStopped = err; // keep what is already written: those AI credits are not thrown away
@@ -529,6 +559,84 @@ export default function AutomationPanel({
                 One row per website, with all its emails in one cell. After an email is sent, <span className="font-medium text-ink">✓ address</span> is added to the
                 sent column of that row. Obvious placeholders such as you@company.com are skipped.
               </p>
+
+              <div className="mt-4 rounded-xl border border-line p-3.5">
+                <p className="text-sm font-medium text-ink">
+                  Extra columns <span className="font-normal text-ink-soft">(optional)</span>
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
+                  Want the AI to use more of your sheet, such as the owner&rsquo;s name or the niche? Add that column here with a header, then use the header in your instructions.
+                </p>
+
+                {extraCols.length > 0 && (
+                  <ul className="mt-3 space-y-1.5">
+                    {extraCols.map((e) => (
+                      <li key={e.col} className="flex items-center gap-2 rounded-lg bg-mist px-3 py-2 text-sm">
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-white text-xs font-semibold text-ink">{e.col}</span>
+                        <span className="min-w-0 flex-1 truncate text-ink">{e.header}</span>
+                        <button type="button" onClick={() => setExtraCols((list) => list.filter((x) => x.col !== e.col))} className="text-xs font-medium text-red-700 underline underline-offset-2">
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {addOpen ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="grid grid-cols-[80px_1fr] gap-3">
+                      <div>
+                        <label htmlFor="extra-col" className="mb-1 block text-xs text-ink-soft">Column letter</label>
+                        <input
+                          id="extra-col"
+                          maxLength={1}
+                          value={newCol}
+                          onChange={(e) => setNewCol(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addExtraColumn())}
+                          className="input text-center uppercase"
+                          placeholder="F"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="extra-header" className="mb-1 block text-xs text-ink-soft">Header (the name you will use in your instructions)</label>
+                        <input
+                          id="extra-header"
+                          maxLength={40}
+                          value={newHeader}
+                          onChange={(e) => setNewHeader(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addExtraColumn())}
+                          className="input"
+                          placeholder="Owner name"
+                        />
+                      </div>
+                    </div>
+                    {extraError && <p role="alert" className="text-xs text-red-700">{extraError}</p>}
+                    <div className="flex gap-2">
+                      <button type="button" onClick={addExtraColumn} className="btn-primary min-h-[36px] px-3.5 text-xs">
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddOpen(false);
+                          setExtraError(null);
+                        }}
+                        className="btn-ghost min-h-[36px] px-3 text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setAddOpen(true)} disabled={extraCols.length >= MAX_EXTRA_COLUMNS} className="btn-secondary mt-3 min-h-[36px] px-3 text-xs">
+                    + Add column
+                  </button>
+                )}
+
+                {JSON.stringify(extraCols) !== savedExtra && (
+                  <p className="mt-3 rounded-lg bg-amber-soft px-3 py-2 text-xs text-amber">Not saved yet. Press &ldquo;{configured ? "Save and re-import" : "Import sheet"}&rdquo; below to apply your columns.</p>
+                )}
+              </div>
             </fieldset>
 
             <div>
@@ -545,8 +653,26 @@ export default function AutomationPanel({
                 placeholder="Pick a preset above or describe the email. The AI writes a different subject (mentioning the website) and message for every address."
                 className="input resize-y"
               />
+              {extraCols.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-ink-soft">Details from your sheet you can use in the instructions (click to add):</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {extraCols.map((e) => (
+                      <button
+                        key={e.col}
+                        type="button"
+                        onClick={() => setPrompt((p) => (p.length + e.header.length + 3 > 1500 ? p : `${p}${p && !/\s$/.test(p) ? " " : ""}{${e.header}}`))}
+                        className="rounded-full border border-line bg-white px-2.5 py-1 text-xs font-medium text-ink hover:bg-mist"
+                      >
+                        {`{${e.header}}`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-xs text-ink-soft">For example: &ldquo;Greet them by {`{${extraCols[0].header}}`}.&rdquo; If a row has nothing in that column, the AI leaves it out for that row.</p>
+                </div>
+              )}
               <p className="mt-1.5 text-xs text-ink-soft">
-                This prompt is used for the button batch and for the daily schedule. Your instructions go to an AI provider; email addresses do not.
+                This prompt is used for the button batch and for the daily schedule. Your instructions, each recipient&rsquo;s website and the extra columns you add go to an AI provider; email addresses do not.
               </p>
               <AiStatusNote className="mt-1.5" />
             </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { AutomationError, automationErrorResponse, computePending, getSheetsAccess, type OutreachSettings } from "@/lib/automation";
-import { parseSpreadsheetUrl, resolveSheetTitle } from "@/lib/sheets";
+import { EXTRA_COLUMN_LIMIT, parseExtraCols, parseSpreadsheetUrl, resolveSheetTitle } from "@/lib/sheets";
 
 export const maxDuration = 60;
 
@@ -25,6 +25,17 @@ export async function POST(request: NextRequest) {
     if (!cols.every((c) => COLUMN.test(c))) throw new AutomationError("Columns must be single letters, like B, E and F.");
     const [websiteCol, emailCol, sentCol] = cols.map((c) => c.toUpperCase());
     if (new Set([websiteCol, emailCol, sentCol]).size !== 3) throw new AutomationError("The website, emails and sent columns must be different.");
+
+    // Optional extra columns (a letter + the header the person uses for it in their instructions).
+    const extraCols = parseExtraCols(body?.extraCols);
+    const asked = Array.isArray(body?.extraCols) ? body.extraCols.length : 0;
+    if (asked > extraCols.length) {
+      throw new AutomationError(`Each extra column needs its own letter (A to Z) and its own header of up to 40 characters, with at most ${EXTRA_COLUMN_LIMIT} columns.`);
+    }
+    for (const extra of extraCols) {
+      if ([websiteCol, emailCol, sentCol].includes(extra.col)) throw new AutomationError(`Column ${extra.col} is already used for the website, emails or sent marks. Pick another letter for "${extra.header}".`);
+      if (extra.header.toLowerCase() === "website") throw new AutomationError('"Website" is already used for the domain column. Give the extra column another header.');
+    }
 
     // Optional filter, for example only rows where the "Guest Post?" column says Yes.
     const filterColRaw = str(body?.filterCol);
@@ -52,6 +63,7 @@ export async function POST(request: NextRequest) {
       sent_col: sentCol,
       filter_col: useFilter ? filterColRaw.toUpperCase() : null,
       filter_value: useFilter ? filterValue : null,
+      extra_cols: extraCols,
       prompt,
       timezone,
     } as OutreachSettings;
@@ -61,7 +73,14 @@ export async function POST(request: NextRequest) {
       throw new AutomationError(`No email addresses found in column ${emailCol} of "${sheetTitle}"${useFilter ? ` (rows where column ${filterColRaw.toUpperCase()} is "${filterValue}")` : ""}. Check the column letters.`);
     }
 
-    const { error } = await supabase.from("outreach_settings").upsert({ ...settings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    let { error } = await supabase.from("outreach_settings").upsert({ ...settings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (error && /extra_cols/i.test(error.message ?? "")) {
+      // the column does not exist yet (migration not run): everything else still saves
+      if (extraCols.length > 0) throw new AutomationError("To use extra columns, run supabase/migrations_add_extra_columns.sql in the Supabase SQL Editor first.");
+      const { extra_cols: _unused, ...rest } = settings as OutreachSettings & { extra_cols?: unknown };
+      void _unused;
+      ({ error } = await supabase.from("outreach_settings").upsert({ ...rest, updated_at: new Date().toISOString() }, { onConflict: "user_id" }));
+    }
     if (error) throw error;
 
     return NextResponse.json({ ok: true, sheetTitle, stats });

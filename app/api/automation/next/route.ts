@@ -25,7 +25,7 @@ export async function POST() {
 
     return NextResponse.json({
       ok: true,
-      items: plan.map(({ sender, item }) => ({ row: item.row, website: item.website, email: item.email, accountId: sender.accountId, fromEmail: sender.email })),
+      items: plan.map(({ sender, item }) => ({ row: item.row, website: item.website, fields: item.fields, email: item.email, accountId: sender.accountId, fromEmail: sender.email })),
       prompt: settings.prompt,
       stats,
       skipped: senders.filter((s) => s.enabled && s.needsReconnect).map((s) => s.email),

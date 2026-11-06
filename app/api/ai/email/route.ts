@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { MAX_DRAFTS_PER_REQUEST, aiErrorMessage, generateEmails, isAiConfigured } from "@/lib/ai";
+import { MAX_DRAFTS_PER_REQUEST, aiErrorMessage, generateEmails, isAiConfigured, type AiContext } from "@/lib/ai";
 import { addAiUsage, getAiAccess, type AiAccess } from "@/lib/ai-usage";
 
 // Generating several emails can take a while on the free tier.
@@ -25,8 +25,23 @@ export async function POST(request: NextRequest) {
   }
 
   // Optional: one website per email (from the spreadsheet), mentioned in each subject.
-  let contexts: (string | null)[] = Array(count).fill(null);
-  if (body?.websites !== undefined) {
+  let contexts: AiContext[] = Array(count).fill(null);
+  if (body?.contexts !== undefined) {
+    // One entry per email: its website and the values of the extra sheet columns, by header.
+    if (!Array.isArray(body.contexts) || body.contexts.length !== count) {
+      return NextResponse.json({ error: "contexts must have one entry per email." }, { status: 400 });
+    }
+    contexts = body.contexts.map((c: { website?: unknown; fields?: unknown }): AiContext => {
+      const website = typeof c?.website === "string" && c.website.trim() ? c.website.trim().slice(0, 100) : null;
+      const fields: Record<string, string> = {};
+      if (c?.fields && typeof c.fields === "object") {
+        for (const [header, value] of Object.entries(c.fields as Record<string, unknown>).slice(0, 8)) {
+          if (typeof value === "string" && value.trim()) fields[header.slice(0, 40)] = value.replace(/\s+/g, " ").trim().slice(0, 200);
+        }
+      }
+      return { website, fields };
+    });
+  } else if (body?.websites !== undefined) {
     if (!Array.isArray(body.websites) || body.websites.length !== count) {
       return NextResponse.json({ error: "websites must have one entry per email." }, { status: 400 });
     }

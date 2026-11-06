@@ -282,6 +282,14 @@ Google's app verification (like `gmail.send`). Every send is recorded in the
 database as well as in the sheet, so a failed tick is back-filled instead of
 re-sending. The daily count follows the timezone of the browser that imported the sheet.
 
+## Extra sheet columns (optional)
+
+Under "Columns" on the Automation page, **+ Add column** lets you name more columns of your sheet (a letter and a header, up to 8),
+for example `F` = "Owner name". Mention the header in your instructions (click the chip under the prompt to insert `{Owner name}`)
+and the AI uses that row's value in its message. Empty cells are skipped for that row. The values (like the website) are sent to the
+AI provider as data, never as instructions; email addresses are not. Run `supabase/migrations_add_extra_columns.sql` once. Changes
+apply after "Save and re-import", for the button batch and for the daily schedule.
+
 ## Connection health, reconnecting and saved drafts
 
 - Run `supabase/migrations_add_reconnect_and_drafts.sql` (adds `needs_reconnect` and the saved-batch table).

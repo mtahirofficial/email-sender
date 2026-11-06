@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { AccountAuthError, accountErrorInfo, getValidAccessToken, listConnectedAccounts, type Provider } from "@/lib/accounts";
 import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
-import { SheetsError, colIndex, paintSentCells, parseSheet, readValues, writeCells, type SheetItem } from "@/lib/sheets";
+import { SheetsError, colIndex, paintSentCells, parseExtraCols, parseSheet, readValues, writeCells, type ExtraColumn, type SheetItem } from "@/lib/sheets";
 
 export type OutreachSettings = {
   user_id: string;
@@ -15,6 +15,7 @@ export type OutreachSettings = {
   sent_col: string;
   filter_col: string | null;
   filter_value: string | null;
+  extra_cols?: ExtraColumn[]; // optional extra columns whose values the AI may use
   prompt: string;
   timezone: string;
   schedule_enabled: boolean;
@@ -79,14 +80,15 @@ export async function getSheetsAccess(supabase: SupabaseClient, userId: string, 
 
 // ---- reading the sheet -------------------------------------------------------
 
-type SheetColumns = Pick<OutreachSettings, "spreadsheet_id" | "sheet_title" | "website_col" | "email_col" | "sent_col" | "filter_col" | "filter_value">;
+type SheetColumns = Pick<OutreachSettings, "spreadsheet_id" | "sheet_title" | "website_col" | "email_col" | "sent_col" | "filter_col" | "filter_value" | "extra_cols">;
 
 export async function loadSheet(accessToken: string, s: SheetColumns) {
   const idx = { website: colIndex(s.website_col), email: colIndex(s.email_col), sent: colIndex(s.sent_col) };
   const filter = s.filter_col && s.filter_value?.trim() ? { col: colIndex(s.filter_col), value: s.filter_value.trim().toLowerCase() } : undefined;
-  const last = Math.max(idx.website, idx.email, idx.sent, filter?.col ?? 0);
+  const extras = parseExtraCols(s.extra_cols).map((e) => ({ col: colIndex(e.col), header: e.header }));
+  const last = Math.max(idx.website, idx.email, idx.sent, filter?.col ?? 0, ...extras.map((e) => e.col));
   const values = await readValues(accessToken, s.spreadsheet_id, s.sheet_title, String.fromCharCode(65 + last));
-  return { items: parseSheet(values, { ...idx, filter }), values, idx };
+  return { items: parseSheet(values, { ...idx, filter, extras }), values, idx };
 }
 
 /** Appends "✓ address" to the sent cell of each row, keeping whatever is already there. */

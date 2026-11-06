@@ -430,3 +430,6 @@ create policy "inbox_settings_own" on public.inbox_settings
 
 -- Highlights a new reply on a conversation marked done.
 alter table public.conversations add column if not exists reply_unseen boolean not null default false;
+
+-- Optional extra sheet columns for the automation (their values are given to the AI).
+alter table public.outreach_settings add column if not exists extra_cols jsonb not null default '[]'::jsonb;

@@ -49,6 +49,7 @@ export default async function AutomationPage() {
         sent_col: s.sent_col,
         filter_col: s.filter_col ?? null,
         filter_value: s.filter_value ?? null,
+        extra_cols: Array.isArray(s.extra_cols) ? s.extra_cols : [],
         prompt: s.prompt,
         schedule_enabled: Boolean(s.schedule_enabled),
         schedule_time: s.schedule_time ?? "10:00",

@@ -124,7 +124,27 @@ export async function paintSentCells(accessToken: string, id: string, title: str
 
 // ---- parsing ---------------------------------------------------------------
 
-export type SheetItem = { row: number; website: string | null; email: string; sent: boolean };
+/** An extra sheet column the person added: its letter and the header they call it in their instructions. */
+export type ExtraColumn = { col: string; header: string };
+export const EXTRA_COLUMN_LIMIT = 8;
+
+/** Cleans a saved/submitted list of extra columns: single letters, short unique headers, at most EXTRA_COLUMN_LIMIT. */
+export function parseExtraCols(raw: unknown): ExtraColumn[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ExtraColumn[] = [];
+  for (const entry of raw) {
+    const col = typeof entry?.col === "string" ? entry.col.trim().toUpperCase() : "";
+    const header = typeof entry?.header === "string" ? entry.header.replace(/\s+/g, " ").trim().slice(0, 40) : "";
+    if (!/^[A-Z]$/.test(col) || !header) continue;
+    if (out.some((e) => e.col === col || e.header.toLowerCase() === header.toLowerCase())) continue;
+    out.push({ col, header });
+    if (out.length === EXTRA_COLUMN_LIMIT) break;
+  }
+  return out;
+}
+
+/** `fields`: the values of the extra columns for this row, by header (empty cells are left out). */
+export type SheetItem = { row: number; website: string | null; email: string; sent: boolean; fields: Record<string, string> };
 
 const EMAIL = /^[a-z0-9](?:[a-z0-9._%+-]*[a-z0-9])?@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i;
 
@@ -161,7 +181,7 @@ export function normalizeWebsite(raw: string): string | null {
  */
 export function parseSheet(
   values: string[][],
-  cols: { website: number; email: number; sent: number; filter?: { col: number; value: string } }
+  cols: { website: number; email: number; sent: number; filter?: { col: number; value: string }; extras?: { col: number; header: string }[] }
 ): SheetItem[] {
   const items: SheetItem[] = [];
 
@@ -176,8 +196,14 @@ export function parseSheet(
     const sentSet = new Set(extractEmails(sentText));
     const rowHandled = sentText !== "" && sentSet.size === 0;
 
+    const fields: Record<string, string> = {};
+    for (const extra of cols.extras ?? []) {
+      const value = (row[extra.col] ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+      if (value) fields[extra.header] = value;
+    }
+
     for (const email of emails) {
-      items.push({ row: index + 1, website, email, sent: rowHandled || sentSet.has(email) });
+      items.push({ row: index + 1, website, email, sent: rowHandled || sentSet.has(email), fields });
     }
   });
   return items;

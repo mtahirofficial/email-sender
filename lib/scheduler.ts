@@ -81,7 +81,7 @@ export async function prepareDay(admin: SupabaseClient, settings: OutreachSettin
   for (let i = 0; i < plan.length; i += AI_BATCH) {
     const chunk = plan.slice(i, i + AI_BATCH);
     try {
-      const got = await generateEmails(settings.prompt, chunk.map((p) => p.item.website), { groqKey: access.ownKey });
+      const got = await generateEmails(settings.prompt, chunk.map((p) => ({ website: p.item.website, fields: p.item.fields })), { groqKey: access.ownKey });
       written.push(...got);
       await addAiUsage(settings.user_id, chunk.length, usedNow);
       usedNow += chunk.length;
