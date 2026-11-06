@@ -62,7 +62,7 @@ const FAQ = [
   },
   {
     q: "Can Outbox read my inbox?",
-    a: "By default, no. Outbox asks only for permission to send mail (Gmail's gmail.send and Microsoft's Mail.Send) plus your address, so it can label the connection. Two features are optional and asked for separately: spreadsheet automation asks for Google Sheets access, and the Inbox asks for permission to read your Gmail so it can show replies to emails you sent and help you answer them. Outbox never deletes or changes anything in your mailbox.",
+    a: "By default, no. Outbox asks only for permission to send mail (Gmail's gmail.send and Microsoft's Mail.Send) plus your address, so it can label the connection. Two features are optional and asked for separately: spreadsheet automation asks for Google Sheets access, and the Inbox asks for permission to read your Gmail so it can show your inbox and the replies to emails you sent, and help you answer them. Outbox never deletes or changes anything in your mailbox.",
   },
   {
     q: "Which email accounts work?",

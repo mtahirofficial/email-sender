@@ -11,12 +11,16 @@ export class GmailApiError extends Error {
   }
 }
 
-async function gmailGet(accessToken: string, path: string): Promise<any> {
+async function gmailGet(accessToken: string, path: string, retried = false): Promise<any> {
   const res = await fetch(`${API}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });
+  if (res.status === 429 && !retried) {
+    await new Promise((resolve) => setTimeout(resolve, 1200)); // Gmail's per-second limit: wait a moment, then try once more
+    return gmailGet(accessToken, path, true);
+  }
   if (!res.ok) {
     const text = await res.text();
     if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {
@@ -145,7 +149,7 @@ const decodeEntities = (s: string) => s.replace(/&#39;/g, "'").replace(/&quot;/g
 export async function listRecentInboundThreadIds(accessToken: string, days = 30): Promise<Set<string>> {
   const ids = new Set<string>();
   let pageToken = "";
-  for (let page = 0; page < 3; page++) {
+  for (let page = 0; page < 10; page++) { // up to 5,000 recent incoming messages (ids only)
     const q = encodeURIComponent(`newer_than:${days}d -in:sent -in:drafts`);
     const data = await gmailGet(accessToken, `/messages?q=${q}&maxResults=500&fields=messages(threadId),nextPageToken${pageToken ? `&pageToken=${pageToken}` : ""}`);
     for (const m of data.messages ?? []) ids.add(m.threadId);
@@ -203,4 +207,55 @@ export function analyzeThread(messages: ThreadMessage[], accountEmail: string): 
   const lastInbound = real[real.length - 1];
   const last = messages[messages.length - 1];
   return { state: mine(last) ? "answered" : "replied", followUps, lastInbound };
+}
+
+// ---- the whole inbox, one page at a time -------------------------------------
+
+export type MailListItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; isReply: boolean };
+
+export const INBOX_PAGE_SIZE = 50;
+
+/**
+ * One page (50) of the Inbox, newest first, like Gmail. `pageToken` is the token Gmail gave with the previous page.
+ * Only the sender, subject, date and a short preview are read for the list; the full text is read when a message is opened.
+ */
+export async function listInboxPage(accessToken: string, opts: { pageToken?: string; q?: string } = {}): Promise<{ items: MailListItem[]; nextPageToken: string | null }> {
+  const params = [`labelIds=INBOX`, `maxResults=${INBOX_PAGE_SIZE}`, `fields=messages(id,threadId),nextPageToken`];
+  if (opts.q?.trim()) params.push(`q=${encodeURIComponent(opts.q.trim().slice(0, 200))}`);
+  if (opts.pageToken) {
+    if (!/^[A-Za-z0-9_-]{1,300}$/.test(opts.pageToken)) throw new GmailApiError(400, "Bad page token");
+    params.push(`pageToken=${opts.pageToken}`);
+  }
+  const list = await gmailGet(accessToken, `/messages?${params.join("&")}`);
+  const ids: { id: string; threadId: string }[] = list.messages ?? [];
+
+  const detail = "format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=In-Reply-To&fields=id,threadId,labelIds,snippet,internalDate,payload/headers";
+  const found: (MailListItem | null)[] = new Array(ids.length).fill(null);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(5, ids.length) }, async () => {
+      while (next < ids.length) {
+        const index = next++;
+        try {
+          const raw = await gmailGet(accessToken, `/messages/${encodeURIComponent(ids[index].id)}?${detail}`);
+          const h = (name: string) => raw.payload?.headers?.find((x: { name: string }) => x.name.toLowerCase() === name.toLowerCase())?.value ?? "";
+          const subject = decodeMimeWords(h("Subject"));
+          found[index] = {
+            id: raw.id,
+            threadId: raw.threadId,
+            from: decodeMimeWords(h("From")),
+            subject,
+            snippet: decodeEntities(raw.snippet ?? ""),
+            at: Number(raw.internalDate ?? 0),
+            unread: (raw.labelIds ?? []).includes("UNREAD"),
+            isReply: Boolean(h("In-Reply-To")) || /^\s*re:/i.test(subject),
+          };
+        } catch (err) {
+          if (err instanceof GoogleReadScopeError) throw err;
+          // a message deleted while we were listing: leave it out
+        }
+      }
+    })
+  );
+  return { items: found.filter((m): m is MailListItem => m !== null), nextPageToken: list.nextPageToken ?? null };
 }

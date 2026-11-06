@@ -81,8 +81,8 @@ export default function PrivacyPage() {
       </p>
       <p>
         If you turn on the <strong>Inbox</strong> for a Gmail account we also request <strong>gmail.readonly</strong>.
-        Google cannot limit this permission to replies, but {SITE_NAME} only looks for replies to emails it sent for you.
-        We store, per person you emailed, their address, the subject, the status of the conversation and a short
+        Google cannot limit this permission to replies. {SITE_NAME} uses it to show your inbox (sender, subject and a short preview, read
+        from Gmail each time and not stored) and to find replies to emails it sent for you. We store, per person you emailed, their address, the subject, the status of the conversation and a short
         snippet (up to 300 characters) of their latest reply. The full text of messages is read from Gmail only when you
         open a conversation and is <strong>not stored</strong>. When you ask for a suggested reply or follow-up, the
         text of that conversation is sent to our AI provider (Groq) only to write that suggestion; nothing is sent

@@ -23,8 +23,8 @@ export default async function InboxPage() {
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="font-serif text-3xl text-ink">Inbox</h1>
         <p className="mb-6 mt-2 text-sm leading-relaxed text-ink-soft">
-          Replies to the emails you sent, and a nudge for the ones nobody answered. Outbox helps you understand each reply and write the answer. Nothing is sent
-          until you press Send.
+          Your Gmail inbox, replies to the emails you sent, and a nudge for the ones nobody answered. Outbox helps you understand each message and write the answer.
+          Nothing is sent until you press Send.
         </p>
         <Suspense fallback={null}>
           <AlertBanner />

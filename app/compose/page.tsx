@@ -7,7 +7,6 @@ import { listConnectedAccounts, refreshAccountHealth } from "@/lib/accounts";
 import { isAiConfigured } from "@/lib/ai";
 import { getUserKeyHint } from "@/lib/ai-keys";
 import { getAiPresets } from "@/lib/ai-presets";
-import ConnectAccounts from "@/components/ConnectAccounts";
 import EmailForm from "@/components/EmailForm";
 import AlertBanner from "@/components/AlertBanner";
 import SiteHeader from "@/components/SiteHeader";
@@ -27,7 +26,6 @@ export default async function ComposePage() {
   // Flags connections that Google/Microsoft no longer accept, so "Reconnect" shows only when needed.
   const accounts = await refreshAccountHealth(supabase, user.id, await listConnectedAccounts(supabase, user.id));
   const presets = await getAiPresets(supabase);
-  const microsoftEnabled = Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
 
   return (
     <>
@@ -44,11 +42,16 @@ export default async function ComposePage() {
           <AlertBanner />
         </Suspense>
 
-        <div className="grid gap-8 md:grid-cols-[300px_1fr] md:items-start">
-          <div className="md:sticky md:top-24">
-            <ConnectAccounts accounts={accounts} microsoftEnabled={microsoftEnabled} />
-          </div>
+        <div className="mx-auto max-w-4xl">
           <div className="space-y-4">
+            {accounts.length === 0 && (
+              <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
+                <p className="text-sm text-ink-soft">Connect a Gmail or Outlook account to start sending.</p>
+                <Link href="/settings" className="btn-primary min-h-[40px] px-3.5 text-sm">
+                  Connect an account in Settings
+                </Link>
+              </div>
+            )}
             <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
               <p className="text-sm text-ink-soft">Emailing a list from a Google Sheet every day?</p>
               <Link href="/automation" className="btn-secondary min-h-[40px] px-3">

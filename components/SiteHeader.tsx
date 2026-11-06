@@ -16,6 +16,7 @@ import {
   SheetIcon,
   SparkleIcon,
   SettingsIcon,
+  UserIcon,
 } from "@/components/icons";
 
 const PUBLIC_LINKS = [
@@ -109,6 +110,9 @@ function AccountMenu({ user, onSignedOut }: { user: HeaderUser; onSignedOut: () 
           </div>
           <hr className="my-1 border-line" />
 
+          <Link href="/profile" role="menuitem" onClick={() => setOpen(false)} className="menu-item">
+            <UserIcon className="h-4 w-4 text-ink-soft" /> Profile
+          </Link>
           <Link href="/settings" role="menuitem" onClick={() => setOpen(false)} className="menu-item">
             <SettingsIcon className="h-4 w-4 text-ink-soft" /> Settings
           </Link>

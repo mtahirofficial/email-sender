@@ -21,7 +21,7 @@ export default function EmailTestSendForm({
   if (accounts.length === 0) {
     return (
       <p className="text-sm text-ink-soft">
-        Connect a Gmail or Outlook account on the Compose page before sending a test email.
+        Connect a Gmail or Outlook account in Settings before sending a test email.
       </p>
     );
   }

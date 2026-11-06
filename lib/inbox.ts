@@ -10,6 +10,7 @@ import {
   findOutreachThread,
   getThreadFull,
   getThreadMeta,
+  listInboxPage,
   listRecentInboundThreadIds,
   type ThreadMessage,
 } from "@/lib/gmail-read";
@@ -37,6 +38,8 @@ export type Conversation = {
   ai_intent: string | null;
   ai_summary: string | null;
   last_checked_at: string | null;
+  /** a new reply arrived on a conversation marked done and has not been opened yet */
+  reply_unseen?: boolean;
 };
 
 export type InboxSettings = { follow_up_after_days: number; max_follow_ups: number; instructions: string; last_sync_at: string | null };
@@ -44,6 +47,16 @@ const DEFAULTS: InboxSettings = { follow_up_after_days: 4, max_follow_ups: 2, in
 
 const DAY = 86_400_000;
 const WINDOW_DAYS = 45; // conversations older than this are not tracked
+
+/** Updates a conversation. If the optional reply_unseen column does not exist yet, the rest is still saved. */
+async function updateConversation(supabase: SupabaseClient, id: string, patch: Record<string, unknown>) {
+  const { error } = await supabase.from("conversations").update(patch).eq("id", id);
+  if (error && /reply_unseen/i.test(error.message ?? "")) {
+    const { reply_unseen: _ignored, ...rest } = patch;
+    void _ignored;
+    await supabase.from("conversations").update(rest).eq("id", id);
+  }
+}
 
 // ---- settings --------------------------------------------------------------
 
@@ -77,17 +90,17 @@ export async function listInbox(supabase: SupabaseClient, userId: string) {
     inbox_enabled: Boolean(a.inbox_enabled),
     sheets_enabled: Boolean(a.sheets_enabled),
   }));
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("id, account_id, to_email, subject, sent_at, status, reply_from, reply_snippet, reply_at, follow_up_count, last_follow_up_at, ai_intent, ai_summary")
-    .eq("user_id", userId)
-    .order("sent_at", { ascending: false })
-    .limit(1000);
-  if (error) throw error;
+  const columns = "id, account_id, to_email, subject, sent_at, status, reply_from, reply_snippet, reply_at, follow_up_count, last_follow_up_at, ai_intent, ai_summary";
+  const query = (cols: string) => supabase.from("conversations").select(cols).eq("user_id", userId).order("sent_at", { ascending: false }).limit(1000);
+  let result = await query(`${columns}, reply_unseen`);
+  if (result.error && /reply_unseen/i.test(result.error.message ?? "")) result = await query(columns); // migration not run yet
+  if (result.error) throw result.error;
+  const data = (result.data ?? []) as unknown as Record<string, any>[];
 
   const now = Date.now();
-  const items = (data ?? []).map((c) => ({
+  const items = data.map((c) => ({
     ...c,
+    reply_unseen: Boolean(c.reply_unseen),
     followUpDue:
       c.status === "waiting" &&
       c.follow_up_count < settings.max_follow_ups &&
@@ -136,11 +149,11 @@ async function syncAccount(supabase: SupabaseClient, userId: string, account: { 
     }
 
     // 2) find the Gmail conversation of each one that does not have it yet (a few per run)
-    const { data: rows, error } = await supabase.from("conversations").select("*").eq("user_id", userId).eq("account_id", account.id).neq("status", "closed").gte("sent_at", since).limit(1000);
+    const { data: rows, error } = await supabase.from("conversations").select("*").eq("user_id", userId).eq("account_id", account.id).gte("sent_at", since).limit(1000);
     if (error) throw error;
     const active = (rows ?? []) as Conversation[];
     const now = new Date().toISOString();
-    await mapLimit(active.filter((c) => !c.thread_id).slice(0, 40), 4, async (c) => {
+    await mapLimit(active.filter((c) => !c.thread_id && c.status !== "closed").slice(0, 40), 4, async (c) => {
       const id = await findOutreachThread(token, c.to_email, Date.parse(c.sent_at));
       c.thread_id = id;
       await supabase.from("conversations").update({ ...(id ? { thread_id: id } : {}), last_checked_at: now }).eq("id", c.id);
@@ -156,6 +169,28 @@ async function syncAccount(supabase: SupabaseClient, userId: string, account: { 
     let newReplies = 0;
     await mapLimit(toCheck, 4, async (c) => {
       const t = analyzeThread(await getThreadMeta(token, c.thread_id!), account.email);
+      const lastReplyAt = t.lastInbound ? new Date(t.lastInbound.at).toISOString() : null;
+      const isNewReply = Boolean(lastReplyAt && (!c.reply_at || Date.parse(lastReplyAt) > Date.parse(c.reply_at)));
+
+      if (c.status === "closed") {
+        // Marked done: it stays in Done, but a reply that arrives later is highlighted there until it is opened.
+        if (!isNewReply || !t.lastInbound) {
+          await updateConversation(supabase, c.id, { last_checked_at: now }); // so it is not looked at again before the others
+          return;
+        }
+        newReplies++;
+        await updateConversation(supabase, c.id, {
+          last_checked_at: now,
+          reply_from: t.lastInbound.from.slice(0, 200),
+          reply_snippet: t.lastInbound.snippet.slice(0, 300),
+          reply_at: lastReplyAt,
+          ai_intent: null,
+          ai_summary: null,
+          reply_unseen: true,
+        });
+        return;
+      }
+
       const patch: Record<string, unknown> = { last_checked_at: now, status: t.state };
       if (t.lastInbound) {
         const at = new Date(t.lastInbound.at).toISOString();
@@ -169,7 +204,7 @@ async function syncAccount(supabase: SupabaseClient, userId: string, account: { 
       }
       if (t.state === "waiting") patch.follow_up_count = Math.max(c.follow_up_count, t.followUps);
       if (t.state === "replied" && c.status !== "replied") newReplies++;
-      await supabase.from("conversations").update(patch).eq("id", c.id);
+      await updateConversation(supabase, c.id, patch);
     });
     return { email: account.email, newReplies };
   } catch (err) {
@@ -203,18 +238,43 @@ async function loadConversation(supabase: SupabaseClient, userId: string, id: st
   return data as Conversation;
 }
 
-async function connect(supabase: SupabaseClient, userId: string, conv: Conversation) {
-  if (!conv.thread_id) throw new InboxError("This conversation is not in Gmail yet. Press Refresh and try again.", 409);
-  return getValidAccessToken(supabase, userId, conv.account_id);
+/** Which Gmail conversation to work on: one Outbox tracks (by id), or any message of the inbox (account + thread). */
+export type TargetInput = { id?: string; account?: string; thread?: string };
+type Target = { conv: Conversation | null; accountId: string; threadId: string };
+
+async function resolveTarget(supabase: SupabaseClient, userId: string, input: TargetInput): Promise<Target> {
+  if (input.id) {
+    const conv = await loadConversation(supabase, userId, input.id);
+    if (!conv.thread_id) throw new InboxError("This conversation is not in Gmail yet. Press Refresh and try again.", 409);
+    return { conv, accountId: conv.account_id, threadId: conv.thread_id };
+  }
+  const account = input.account ?? "";
+  const thread = input.thread ?? "";
+  if (!/^[0-9a-fA-F-]{36}$/.test(account) || !/^[A-Za-z0-9_-]{6,64}$/.test(thread)) throw new InboxError("Choose a message first.", 400);
+  // If Outbox tracks this conversation too (it was one of its emails), keep its status up to date.
+  const { data } = await supabase.from("conversations").select("*").eq("user_id", userId).eq("account_id", account).eq("thread_id", thread).maybeSingle();
+  return { conv: (data as Conversation | null) ?? null, accountId: account, threadId: thread };
 }
+
+const connect = (supabase: SupabaseClient, userId: string, target: Target) => getValidAccessToken(supabase, userId, target.accountId);
 
 const isMine = (m: ThreadMessage, email: string) => m.labelIds.includes("SENT") || addressOf(m.from) === email.toLowerCase();
 
+/** One page (50) of the inbox of a connected Gmail account. Read from Gmail now, not stored. */
+export async function listMailPage(supabase: SupabaseClient, userId: string, accountId: string, opts: { pageToken?: string; q?: string }) {
+  const accounts = await listConnectedAccounts(supabase, userId);
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account || account.provider !== "google") throw new InboxError("Choose a Gmail account.", 400);
+  if (!account.inbox_enabled) throw new InboxError("Allow Outbox to read this Gmail account first.", 409, { needsPermission: true });
+  const { accessToken } = await getValidAccessToken(supabase, userId, accountId);
+  return listInboxPage(accessToken, opts);
+}
+
 /** The conversation as readable messages. Read from Gmail now, not stored. */
-export async function openThread(supabase: SupabaseClient, userId: string, id: string) {
-  const conv = await loadConversation(supabase, userId, id);
-  const ctx = await connect(supabase, userId, conv);
-  const messages = await getThreadFull(ctx.accessToken, conv.thread_id!);
+export async function openThread(supabase: SupabaseClient, userId: string, input: TargetInput) {
+  const target = await resolveTarget(supabase, userId, input);
+  const ctx = await connect(supabase, userId, target);
+  const messages = await getThreadFull(ctx.accessToken, target.threadId);
   return {
     from: ctx.email,
     messages: messages.map((m) => ({ from: m.from, fromMe: isMine(m, ctx.email), at: m.at, text: m.text || m.snippet })),
@@ -222,7 +282,7 @@ export async function openThread(supabase: SupabaseClient, userId: string, id: s
 }
 
 /** Writes a draft: a reply to what they said, or a follow-up to silence. Costs one AI draft from the daily allowance. */
-export async function draftConversation(supabase: SupabaseClient, userId: string, id: string, kind: "reply" | "followup", instruction = "") {
+export async function draftConversation(supabase: SupabaseClient, userId: string, input: TargetInput, kind: "reply" | "followup", instruction = "") {
   const access = await getAiAccess(userId);
   // Mailbox text only goes to Groq (see AiOptions.groqOnly), so Groq must be available.
   if (!access.ownKey && !process.env.GROQ_API_KEY) throw new InboxError("Replies and follow-ups need a Groq key. Add your own free Groq API key in Settings.", 503, { limitReached: true });
@@ -230,9 +290,10 @@ export async function draftConversation(supabase: SupabaseClient, userId: string
     throw new InboxError(`Daily free AI limit reached (${access.limit} drafts a day). Add your own free Groq API key in Settings to write more.`, 429, { limitReached: true });
   }
 
-  const conv = await loadConversation(supabase, userId, id);
-  const ctx = await connect(supabase, userId, conv);
-  const messages = await getThreadFull(ctx.accessToken, conv.thread_id!);
+  const target = await resolveTarget(supabase, userId, input);
+  if (kind === "followup" && !target.conv) throw new InboxError("A follow-up needs an email Outbox sent.", 400);
+  const ctx = await connect(supabase, userId, target);
+  const messages = await getThreadFull(ctx.accessToken, target.threadId);
   const settings = await getInboxSettings(supabase, userId);
   const opts = { groqKey: access.ownKey, groqOnly: true };
 
@@ -241,10 +302,10 @@ export async function draftConversation(supabase: SupabaseClient, userId: string
       const draft = await draftReply(messages, ctx.email, settings.instructions, opts, instruction);
       await addAiUsage(userId, 1, access.used);
       // only the "understand" button saves what the AI concluded; a message written from the person's own prompt does not
-      if (!instruction.trim()) await supabase.from("conversations").update({ ai_intent: draft.intent, ai_summary: draft.summary }).eq("id", id);
+      if (target.conv && !instruction.trim()) await supabase.from("conversations").update({ ai_intent: draft.intent, ai_summary: draft.summary }).eq("id", target.conv.id);
       return { kind, ...draft };
     }
-    const body = await draftFollowUp(messages, ctx.email, settings.instructions, conv.follow_up_count + 1, Math.max(1, settings.max_follow_ups), opts, instruction);
+    const body = await draftFollowUp(messages, ctx.email, settings.instructions, (target.conv?.follow_up_count ?? 0) + 1, Math.max(1, settings.max_follow_ups), opts, instruction);
     await addAiUsage(userId, 1, access.used);
     return { kind, body, needsReply: true, summary: "", intent: "other" };
   } catch (err) {
@@ -254,21 +315,25 @@ export async function draftConversation(supabase: SupabaseClient, userId: string
 }
 
 /** Sends the text as a reply inside the same Gmail conversation, so it threads properly for the other person. */
-export async function sendConversation(supabase: SupabaseClient, userId: string, id: string, kind: "reply" | "followup", body: string) {
+export async function sendConversation(supabase: SupabaseClient, userId: string, input: TargetInput, kind: "reply" | "followup", body: string) {
   const text = body.trim();
   if (!text) throw new InboxError("Write something to send first.", 400);
   if (text.length > 5000) throw new InboxError("That message is too long.", 400);
 
-  const conv = await loadConversation(supabase, userId, id);
-  const ctx = await connect(supabase, userId, conv);
-  const messages = await getThreadMeta(ctx.accessToken, conv.thread_id!);
+  const target = await resolveTarget(supabase, userId, input);
+  const conv = target.conv;
+  if (kind === "followup" && !conv) throw new InboxError("A follow-up needs an email Outbox sent.", 400);
+  const ctx = await connect(supabase, userId, target);
+  const messages = await getThreadMeta(ctx.accessToken, target.threadId);
   const last = messages[messages.length - 1];
   const inbound = [...messages].reverse().find((m) => !isMine(m, ctx.email) && !/mailer-daemon|postmaster/i.test(m.from));
 
-  const base = (messages[0]?.subject || conv.subject).replace(/^((re|fwd?):\s*)+/i, "").trim() || conv.subject;
+  const base = (messages[0]?.subject || conv?.subject || "").replace(/^((re|fwd?):\s*)+/i, "").trim() || "(no subject)";
   const subject = `Re: ${base}`;
   const replyTo = inbound ? addressOf(inbound.from) : "";
-  const to = kind === "reply" && /^[^\s<>"']+@[^\s<>"']+$/.test(replyTo) && replyTo !== ctx.email.toLowerCase() ? replyTo : conv.to_email;
+  const validReply = /^[^\s<>"']+@[^\s<>"']+$/.test(replyTo) && replyTo !== ctx.email.toLowerCase();
+  const to = kind === "reply" && validReply ? replyTo : conv?.to_email ?? "";
+  if (!to) throw new InboxError("Could not find who to send this to.", 400);
 
   try {
     await sendGmail(ctx.accessToken, {
@@ -276,31 +341,33 @@ export async function sendConversation(supabase: SupabaseClient, userId: string,
       to,
       subject,
       body: text,
-      threadId: conv.thread_id!,
+      threadId: target.threadId,
       inReplyTo: last?.messageId,
       references: [last?.references, last?.messageId].filter(Boolean).join(" ").trim() || undefined,
     });
   } catch (err) {
     if (err instanceof GoogleScopeError) {
-      await markNeedsReconnect(supabase, conv.account_id, true);
+      await markNeedsReconnect(supabase, target.accountId, true);
       throw new InboxError(accountErrorInfo(new AccountAuthError("scope", "google", ctx.email, err.message)).message, 409, { reconnect: "google" });
     }
-    await logEmailAttempt(supabase, { userId, accountId: conv.account_id, fromEmail: ctx.email, toEmail: to, subject, status: "failed", error: err instanceof Error ? err.message.slice(0, 500) : "Send failed" });
+    await logEmailAttempt(supabase, { userId, accountId: target.accountId, fromEmail: ctx.email, toEmail: to, subject, status: "failed", error: err instanceof Error ? err.message.slice(0, 500) : "Send failed" });
     throw new InboxError("Gmail could not send this message. Please try again.", 502);
   }
 
-  await logEmailAttempt(supabase, { userId, accountId: conv.account_id, fromEmail: ctx.email, toEmail: to, subject, status: "sent" });
-  const patch =
-    kind === "reply"
-      ? { status: "answered", last_checked_at: new Date().toISOString() }
-      : { follow_up_count: conv.follow_up_count + 1, last_follow_up_at: new Date().toISOString(), last_checked_at: new Date().toISOString() };
-  await supabase.from("conversations").update(patch).eq("id", id);
+  await logEmailAttempt(supabase, { userId, accountId: target.accountId, fromEmail: ctx.email, toEmail: to, subject, status: "sent" });
+  if (conv) {
+    const patch =
+      kind === "reply"
+        ? { status: "answered", reply_unseen: false, last_checked_at: new Date().toISOString() }
+        : { follow_up_count: conv.follow_up_count + 1, last_follow_up_at: new Date().toISOString(), last_checked_at: new Date().toISOString() };
+    await updateConversation(supabase, conv.id, patch);
+  }
   return { sentTo: to };
 }
 
-export async function setConversationStatus(supabase: SupabaseClient, userId: string, id: string, action: "close" | "reopen") {
+export async function setConversationStatus(supabase: SupabaseClient, userId: string, id: string, action: "close" | "reopen" | "seen") {
   await loadConversation(supabase, userId, id);
-  const patch = action === "close" ? { status: "closed" } : { status: "waiting", last_checked_at: null };
-  const { error } = await supabase.from("conversations").update(patch).eq("id", id).eq("user_id", userId);
-  if (error) throw error;
+  const patch =
+    action === "close" ? { status: "closed", reply_unseen: false } : action === "reopen" ? { status: "waiting", last_checked_at: null, reply_unseen: false } : { reply_unseen: false };
+  await updateConversation(supabase, id, patch);
 }

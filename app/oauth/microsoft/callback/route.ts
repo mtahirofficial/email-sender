@@ -13,13 +13,13 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/compose?error=${encodeURIComponent("Microsoft connection was cancelled.")}`, appUrl)
+      new URL(`/settings?error=${encodeURIComponent("Microsoft connection was cancelled.")}`, appUrl)
     );
   }
 
   if (!code || !state || !expectedState || state !== expectedState) {
     return NextResponse.redirect(
-      new URL(`/compose?error=${encodeURIComponent("Invalid or expired connection request.")}`, appUrl)
+      new URL(`/settings?error=${encodeURIComponent("Invalid or expired connection request.")}`, appUrl)
     );
   }
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     if (!tokens.refresh_token) {
       return NextResponse.redirect(
         new URL(
-          `/compose?error=${encodeURIComponent("Microsoft didn't return a refresh token. Please try connecting again.")}`,
+          `/settings?error=${encodeURIComponent("Microsoft didn't return a refresh token. Please try connecting again.")}`,
           appUrl
         )
       );
@@ -54,13 +54,13 @@ export async function GET(request: NextRequest) {
       expiresInSeconds: tokens.expires_in,
     });
 
-    const response = NextResponse.redirect(new URL("/compose?connected=microsoft", appUrl));
+    const response = NextResponse.redirect(new URL("/settings?connected=microsoft", appUrl));
     response.cookies.delete("microsoft_oauth_state");
     return response;
   } catch (err) {
     console.error(err);
     return NextResponse.redirect(
-      new URL(`/compose?error=${encodeURIComponent("Could not connect this Outlook account.")}`, appUrl)
+      new URL(`/settings?error=${encodeURIComponent("Could not connect this Outlook account.")}`, appUrl)
     );
   }
 }

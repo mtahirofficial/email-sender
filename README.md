@@ -237,7 +237,8 @@ says "Sent". It is read from the database, so it survives a refresh. Run `supaba
 
 ## Inbox: replies and follow-ups (/inbox)
 
-Shows replies to the emails Outbox sent (Gmail only for now), helps you understand each one and write the answer, and
+Shows your Gmail inbox (tab "Full inbox": 50 messages a page, newest first, with search, including mail that was not sent
+with Outbox), replies to the emails Outbox sent (Gmail only for now), helps you understand each one and write the answer, and
 drafts follow-ups for emails nobody answered. Nothing is sent without you pressing Send; replies go out inside the same
 Gmail conversation.
 
@@ -248,9 +249,9 @@ Gmail conversation.
 Things to know before real users:
 - `gmail.readonly` is a **restricted** Google scope. While your app is in Testing (or unverified) you are limited to 100 test users and a warning screen. Going public needs Google's OAuth verification **and an annual third-party security assessment (CASA)**. Plan for it, or keep the Inbox for a small group.
 - Google's Limited Use rules apply to Gmail data. Mailbox text is therefore sent **only to Groq** (never Gemini or Mistral, whose free plans may train on data). Check Groq's current terms before launch. Users need `GROQ_API_KEY` on the server or their own Groq key in Settings.
-- Message text is read from Gmail when a conversation is opened and is not stored. Stored per person: address, subject, status, a 300-character snippet of the latest reply.
+- Inbox lists and message text are read from Gmail when you look at them and are not stored. Stored per person: address, subject, status, a 300-character snippet of the latest reply.
 - Each connected Gmail account has its own inbox (mailbox list on the left). To answer a reply you can either press "Understand and draft reply" or open "Write with my prompt", type what you want to say, and the AI writes the message from that.
-- Follow-up rules (after N days, at most M) and notes for the AI are in the Inbox "Settings". Each AI draft counts as one draft of the daily AI allowance.
+- Follow-up rules (after N days, at most M) and notes for the AI are in **Settings** (connected accounts, AI key, follow-ups and notes for the AI). Name, photo, password and account deletion are on the **Profile** page. Each AI draft counts as one draft of the daily AI allowance.
 
 ## Spreadsheet automation (Google Sheets)
 

@@ -427,3 +427,6 @@ alter table public.inbox_settings enable row level security;
 drop policy if exists "inbox_settings_own" on public.inbox_settings;
 create policy "inbox_settings_own" on public.inbox_settings
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Highlights a new reply on a conversation marked done.
+alter table public.conversations add column if not exists reply_unseen boolean not null default false;

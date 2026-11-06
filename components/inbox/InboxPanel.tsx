@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import AiStatusNote from "@/components/AiStatusNote";
 import { AlertIcon, CheckIcon, SparkleIcon, SpinnerIcon, XIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
+import FullInbox, { senderAddress, type MailItem } from "@/components/inbox/FullInbox";
 
 type Status = "waiting" | "replied" | "answered" | "bounced" | "closed";
 type Item = {
@@ -20,19 +22,22 @@ type Item = {
   ai_intent: string | null;
   ai_summary: string | null;
   followUpDue: boolean;
+  /** a new reply arrived on a conversation marked done and was not opened yet */
+  reply_unseen?: boolean;
 };
 type Account = { id: string; email: string; provider: string; inbox_enabled: boolean; sheets_enabled: boolean };
 type Settings = { follow_up_after_days: number; max_follow_ups: number; instructions: string; last_sync_at: string | null };
 type Data = { settings: Settings; accounts: Account[]; items: Item[] };
 type Message = { from: string; fromMe: boolean; at: number; text: string };
 type Draft = { body: string; summary?: string; intent?: string; needsReply?: boolean };
-type Tab = "replies" | "followup" | "waiting" | "done";
+type Tab = "replies" | "followup" | "waiting" | "done" | "all";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "replies", label: "Replies" },
   { key: "followup", label: "Follow-up due" },
   { key: "waiting", label: "Waiting" },
   { key: "done", label: "Done" },
+  { key: "all", label: "Full inbox" },
 ];
 const INTENT: Record<string, string> = {
   interested: "Interested",
@@ -44,7 +49,7 @@ const INTENT: Record<string, string> = {
 };
 
 const inTab = (item: Item, tab: Tab) =>
-  tab === "replies" ? item.status === "replied" : tab === "followup" ? item.followUpDue : tab === "waiting" ? item.status === "waiting" && !item.followUpDue : ["answered", "bounced", "closed"].includes(item.status);
+  tab === "all" ? false : tab === "replies" ? item.status === "replied" : tab === "followup" ? item.followUpDue : tab === "waiting" ? item.status === "waiting" && !item.followUpDue : ["answered", "bounced", "closed"].includes(item.status);
 
 function ago(iso: string | null) {
   if (!iso) return "";
@@ -80,9 +85,9 @@ export default function InboxPanel() {
   const [syncing, setSyncing] = useState(false);
   const [syncProblems, setSyncProblems] = useState<{ email: string; error: string }[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [mailOpen, setMailOpen] = useState<Item | null>(null); // a message opened from the full inbox
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [accountId, setAccountId] = useState<string | null>(null); // which mailbox is open
   const stopBulk = useRef(false);
 
@@ -136,14 +141,16 @@ export default function InboxPanel() {
   const items = (data?.items ?? []).filter((i) => i.account_id === selected?.id); // this mailbox only
   const counts = Object.fromEntries(TABS.map((t) => [t.key, items.filter((i) => inTab(i, t.key)).length])) as Record<Tab, number>;
   const list = items.filter((i) => inTab(i, tab));
+  const hasNewDone = items.some((i) => i.reply_unseen);
   const stats = (accountId: string) => {
     const mine = (data?.items ?? []).filter((i) => i.account_id === accountId);
-    return { replies: mine.filter((i) => i.status === "replied").length, due: mine.filter((i) => i.followUpDue).length };
+    return { replies: mine.filter((i) => i.status === "replied" || i.reply_unseen).length, due: mine.filter((i) => i.followUpDue).length };
   };
 
   function pick(id: string) {
     setAccountId(id);
     setOpenId(null);
+    setMailOpen(null);
     try {
       localStorage.setItem("inbox-account", id);
     } catch {
@@ -191,7 +198,7 @@ export default function InboxPanel() {
   if (accounts.length === 0) {
     return (
       <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">
-        The Inbox works with Gmail accounts. Connect a Gmail account on the Compose page first.
+        The Inbox works with Gmail accounts. Connect a Gmail account in Settings first.
       </p>
     );
   }
@@ -243,7 +250,7 @@ export default function InboxPanel() {
           <div className="card p-5">
             <h2 className="font-serif text-lg text-ink">Let Outbox see replies for {selected.email}</h2>
             <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-              To show replies, Google asks you to allow Outbox to read your email. Outbox only looks for replies to emails it sent for you. The text of a message is read when you open it and is not stored. This is optional: sending works without it.
+              To show your inbox and replies, Google asks you to allow Outbox to read your email. Messages are read from Gmail when you look at them and are not stored by Outbox. This is optional: sending works without it.
             </p>
             <a href={enableHref(selected)} className="btn-secondary mt-3 min-h-[40px] px-3.5 text-sm">
               Allow for {selected.email}
@@ -271,7 +278,8 @@ export default function InboxPanel() {
                     onClick={() => setTab(t.key)}
                     className={`rounded-full border px-3 py-1.5 text-sm font-medium ${tab === t.key ? "border-accent bg-accent-soft text-accent-deep" : "border-line bg-white text-ink-soft hover:bg-mist"}`}
                   >
-                    {t.label} <span className="text-xs">{counts[t.key]}</span>
+                    {t.label}{t.key !== "all" && <span className="text-xs"> {counts[t.key]}</span>}
+                    {t.key === "done" && hasNewDone && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-accent" aria-label="New reply in Done" />}
                   </button>
                 ))}
               </div>
@@ -288,18 +296,43 @@ export default function InboxPanel() {
                     )}
                   </>
                 )}
-                <button type="button" onClick={() => sync(true)} disabled={syncing} className="btn-secondary min-h-[40px] px-3.5 text-sm">
-                  {syncing ? <SpinnerIcon /> : null} Refresh
-                </button>
-                <button type="button" onClick={() => setShowSettings((v) => !v)} className="btn-ghost min-h-[40px] px-3 text-sm" aria-expanded={showSettings}>
-                  Settings
-                </button>
+                {tab !== "all" && (
+                  <button type="button" onClick={() => sync(true)} disabled={syncing} className="btn-secondary min-h-[40px] px-3.5 text-sm">
+                    {syncing ? <SpinnerIcon /> : null} Refresh
+                  </button>
+                )}
+                <Link href="/settings#inbox" className="btn-ghost min-h-[40px] px-3 text-sm" title="Follow-up rules and notes for the AI">
+                  Inbox settings
+                </Link>
               </div>
             </div>
 
-            {showSettings && <SettingsForm settings={data.settings} onSaved={load} />}
+            {tab === "all" && selected && (
+              <div className="mt-4">
+                <FullInbox
+                  accountId={selected.id}
+                  onOpen={(m: MailItem) =>
+                    setMailOpen({
+                      id: `mail:${selected.id}:${m.threadId}`, // not an Outbox conversation: the id carries the account and the Gmail thread
+                      account_id: selected.id,
+                      to_email: senderAddress(m.from),
+                      subject: m.subject || "(no subject)",
+                      sent_at: new Date(m.at).toISOString(),
+                      status: "replied",
+                      reply_from: m.from,
+                      reply_snippet: m.snippet,
+                      reply_at: new Date(m.at).toISOString(),
+                      follow_up_count: 0,
+                      ai_intent: null,
+                      ai_summary: null,
+                      followUpDue: false,
+                    })
+                  }
+                />
+              </div>
+            )}
 
-            <ul className="mt-4 divide-y divide-line">
+            <ul className={`mt-4 max-h-[60vh] divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${tab === "all" ? "hidden" : ""}`}>
               {list.length === 0 && (
                 <li className="px-2 py-8 text-center text-sm text-ink-soft">
                   {tab === "replies" ? "No replies waiting for an answer." : tab === "followup" ? "Nothing needs a follow-up yet." : tab === "waiting" ? "No emails are waiting for a reply." : "Nothing here yet."}
@@ -307,14 +340,19 @@ export default function InboxPanel() {
               )}
               {list.map((item) => (
                 <li key={item.id}>
-                  <button type="button" onClick={() => setOpenId(item.id)} className="block w-full rounded-lg px-2 py-3 text-left hover:bg-mist">
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(item.id)}
+                    className={`block w-full rounded-lg px-2 py-3 text-left ${item.reply_unseen ? "border border-accent bg-accent-soft/60 hover:bg-accent-soft" : "hover:bg-mist"}`}
+                  >
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="min-w-0 break-all text-sm font-semibold text-ink">{item.to_email}</span>
                       {item.ai_intent && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-deep">{INTENT[item.ai_intent] ?? item.ai_intent}</span>}
+                      {item.reply_unseen && <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">New reply</span>}
                       {drafts[item.id] && <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium text-ink">Draft ready</span>}
-                      <span className="ml-auto text-xs text-ink-soft">{item.status === "replied" ? `Replied ${ago(item.reply_at)}` : `Sent ${ago(item.sent_at)}`}</span>
+                      <span className="ml-auto text-xs text-ink-soft">{item.status === "replied" || item.reply_unseen ? `Replied ${ago(item.reply_at)}` : `Sent ${ago(item.sent_at)}`}</span>
                     </div>
-                    <p className="mt-0.5 truncate text-sm text-ink-soft">{item.status === "replied" && item.reply_snippet ? item.reply_snippet : item.subject}</p>
+                    <p className="mt-0.5 truncate text-sm text-ink-soft">{(item.status === "replied" || item.reply_unseen) && item.reply_snippet ? item.reply_snippet : item.subject}</p>
                     <p className="mt-0.5 text-xs text-ink-soft">
                       {item.status === "waiting" && `${item.follow_up_count} of ${data.settings.max_follow_ups} follow-ups sent`}
                       {item.status === "bounced" && "The email bounced"}
@@ -332,6 +370,10 @@ export default function InboxPanel() {
           </div>
         )}
       </div>
+
+      {mailOpen && (
+        <Conversation key={mailOpen.id} item={mailOpen} onDraft={() => {}} onClose={() => setMailOpen(null)} onChanged={async () => {}} next={() => setMailOpen(null)} />
+      )}
 
       {opened && (
         <Conversation
@@ -354,62 +396,35 @@ export default function InboxPanel() {
   );
 }
 
-function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: () => Promise<void> }) {
-  const toast = useToast();
-  const [days, setDays] = useState(settings.follow_up_after_days);
-  const [max, setMax] = useState(settings.max_follow_ups);
-  const [notes, setNotes] = useState(settings.instructions);
-  const [busy, setBusy] = useState(false);
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await call("/api/inbox", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ followUpAfterDays: days, maxFollowUps: max, instructions: notes }) });
-      toast.success("Inbox settings saved.");
-      await onSaved();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={save} className="mt-4 space-y-3 rounded-xl bg-mist p-4">
-      <div className="flex flex-wrap gap-4">
-        <div>
-          <label htmlFor="fu-days" className="label">
-            Follow up after (days)
-          </label>
-          <input id="fu-days" type="number" min={1} max={30} value={days} onChange={(e) => setDays(Number(e.target.value))} className="input w-28" />
-        </div>
-        <div>
-          <label htmlFor="fu-max" className="label">
-            At most this many follow-ups
-          </label>
-          <input id="fu-max" type="number" min={0} max={5} value={max} onChange={(e) => setMax(Number(e.target.value))} className="input w-28" />
-        </div>
-      </div>
-      <div>
-        <label htmlFor="fu-notes" className="label">
-          Notes for the AI
-        </label>
-        <textarea
-          id="fu-notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          maxLength={2000}
-          rows={4}
-          placeholder="What you offer, your prices, how you like to answer. The AI uses only what is here and in the conversation, so it does not invent prices or promises."
-          className="input"
-        />
-      </div>
-      <button type="submit" disabled={busy} className="btn-primary min-h-[40px] px-4 text-sm">
-        {busy ? <SpinnerIcon /> : null} Save settings
-      </button>
-    </form>
-  );
+/** A message box that is one line high, grows as the text grows and stops at 4 lines (then it scrolls). */
+function AutoTextarea({
+  id,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  maxLines = 4,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  maxLength?: number;
+  maxLines?: number;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const style = getComputedStyle(el);
+    const line = parseFloat(style.lineHeight) || 24;
+    const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+    const max = line * maxLines + padding;
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+  }, [value, maxLines]);
+  return <textarea ref={ref} id={id} rows={1} value={value} onChange={onChange} placeholder={placeholder} maxLength={maxLength} className="input resize-none" />;
 }
 
 function Conversation({
@@ -435,7 +450,10 @@ function Conversation({
   const [busy, setBusy] = useState<"" | "draft" | "send" | "status">("");
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptText, setPromptText] = useState("");
-  const kind: "reply" | "followup" | null = item.status === "waiting" ? "followup" : item.status === "replied" || item.status === "answered" ? "reply" : null;
+  // A message opened from the full inbox is not an Outbox conversation: it is found by account + Gmail thread.
+  const synthetic = item.id.startsWith("mail:");
+  const target: Record<string, string> = synthetic ? { account: item.account_id, thread: item.id.split(":")[2] } : { id: item.id };
+  const kind: "reply" | "followup" | null = item.status === "waiting" ? "followup" : item.status === "replied" || item.status === "answered" || (item.status === "closed" && Boolean(item.reply_at)) ? "reply" : null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -444,8 +462,17 @@ function Conversation({
   }, [onClose]);
 
   useEffect(() => {
+    // opening a conversation with a new reply clears its highlight
+    if (!item.reply_unseen) return;
+    post("/api/inbox/status", { id: item.id, action: "seen" })
+      .then(() => onChanged(false))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  useEffect(() => {
     let cancelled = false;
-    call<{ messages: Message[] }>(`/api/inbox/thread?id=${encodeURIComponent(item.id)}`)
+    call<{ messages: Message[] }>(`/api/inbox/thread?${new URLSearchParams(target)}`)
       .then((d) => !cancelled && setMessages(d.messages))
       .catch((err) => !cancelled && setProblem(err instanceof Error ? err.message : "Could not open this conversation."));
     return () => {
@@ -458,7 +485,7 @@ function Conversation({
     if (!kind) return;
     setBusy("draft");
     try {
-      const d = await post<Draft>("/api/inbox/draft", { id: item.id, kind, ...(instruction ? { instruction } : {}) });
+      const d = await post<Draft>("/api/inbox/draft", { ...target, kind, ...(instruction ? { instruction } : {}) });
       if (!instruction) setInfo(d.summary || d.intent ? { summary: d.summary, intent: d.intent } : null);
       if (d.needsReply === false) {
         setText("");
@@ -467,6 +494,7 @@ function Conversation({
         setText(d.body);
         onDraft({ body: d.body });
       }
+      setPromptOpen(false); // the prompt box goes away and the message box shows the result
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not write the draft.");
     } finally {
@@ -478,7 +506,7 @@ function Conversation({
     if (!kind || !text.trim()) return;
     setBusy("send");
     try {
-      const r = await post<{ sentTo: string }>("/api/inbox/send", { id: item.id, kind, body: text });
+      const r = await post<{ sentTo: string }>("/api/inbox/send", { ...target, kind, body: text });
       toast.success(`Sent to ${r.sentTo}.`);
       await onChanged(true);
       next();
@@ -542,22 +570,20 @@ function Conversation({
         </div>
 
         <div className="space-y-3 border-t border-line px-5 py-4">
-          {kind && (
+          {kind && !promptOpen && (
             <>
               <label htmlFor="draft-text" className="label">
                 {kind === "reply" ? "Your reply" : `Follow-up ${item.follow_up_count + 1}`}
               </label>
-              <textarea
+              <AutoTextarea
                 id="draft-text"
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
                   onDraft({ body: e.target.value });
                 }}
-                rows={6}
                 maxLength={5000}
                 placeholder={kind === "reply" ? "Write your reply, or let the AI suggest one." : "Write a follow-up, or let the AI suggest one."}
-                className="input"
               />
               <p className="text-xs text-ink-soft">The AI only suggests. Read and change the text, then press Send. It goes out inside the same conversation.</p>
             </>
@@ -594,14 +620,14 @@ function Conversation({
                   {busy === "draft" && !promptOpen ? <SpinnerIcon /> : null} {kind === "reply" ? "Understand and draft reply" : "Draft follow-up"}
                 </button>
                 <button type="button" onClick={() => setPromptOpen((v) => !v)} aria-expanded={promptOpen} className="btn-secondary min-h-[40px] px-3.5 text-sm">
-                  <SparkleIcon className="h-4 w-4" /> Write with my prompt
+                  <SparkleIcon className="h-4 w-4" /> {promptOpen ? "Back to the message" : text.trim() ? "Regenerate with my prompt" : "Write with my prompt"}
                 </button>
-                <button type="button" onClick={send} disabled={busy !== "" || !text.trim()} className="btn-primary min-h-[40px] px-4 text-sm">
+                <button type="button" onClick={send} disabled={busy !== "" || promptOpen || !text.trim()} className="btn-primary min-h-[40px] px-4 text-sm">
                   {busy === "send" ? <SpinnerIcon /> : <CheckIcon className="h-4 w-4" />} Send
                 </button>
               </>
             )}
-            {item.status === "closed" ? (
+            {synthetic ? null : item.status === "closed" ? (
               <button type="button" onClick={() => setStatus("reopen")} disabled={busy !== ""} className="btn-ghost ml-auto min-h-[40px] px-3 text-sm">
                 Reopen
               </button>

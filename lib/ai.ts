@@ -346,12 +346,35 @@ async function buildSlots(opts: AiOptions): Promise<Slot[]> {
 
 const cooldowns = new Map<string, number>();
 
+/** Reads "Please try again in 9.2s" / "6m37s" / "850ms" from a rate-limit message. */
+export function parseRetryMs(text: string): number | undefined {
+  const m = /try again in (?:(\d+)m(?!s))?\s*(?:(\d+(?:\.\d+)?)s)?\s*(?:(\d+(?:\.\d+)?)ms)?/i.exec(text);
+  if (!m || (!m[1] && !m[2] && !m[3])) return undefined;
+  return Math.round(Number(m[1] ?? 0) * 60_000 + Number(m[2] ?? 0) * 1000 + Number(m[3] ?? 0));
+}
+
+type LimitKind = "size" | "day" | "minute" | "key" | "other";
+
+/** What a provider error means for the person: request too big, a daily limit, a per-minute limit, or a bad key. */
+export function explainAiError(err: unknown): { kind: LimitKind; waitSeconds?: number } {
+  if (!(err instanceof AiHttpError)) return { kind: "other" };
+  if (err.status === 413 || /request too large|reduce your message size/i.test(err.message)) return { kind: "size" };
+  if (err.status === 401 || err.status === 403) return { kind: "key" };
+  if (err.status === 429) {
+    const wait = err.retryAfterMs ?? parseRetryMs(err.message);
+    if (/per day|\(TPD\)|\(RPD\)|daily/i.test(err.message)) return { kind: "day", waitSeconds: wait ? Math.ceil(wait / 1000) : undefined };
+    return { kind: "minute", waitSeconds: wait ? Math.ceil(wait / 1000) : undefined };
+  }
+  return { kind: "other" };
+}
+
 function cooldownMsFor(err: unknown): number {
   if (err instanceof AiHttpError) {
     const text = err.message;
     if (err.status === 429) {
       if (/per day|\(TPD\)|\(RPD\)|daily/i.test(text)) return 30 * 60_000;
-      return Math.min(Math.max(err.retryAfterMs ?? 0, 30_000), 5 * 60_000);
+      // a per-minute limit clears quickly: wait exactly what the provider says, so the retry below can use the model again
+      return Math.min(Math.max(err.retryAfterMs ?? parseRetryMs(text) ?? 20_000, 1_000), 5 * 60_000);
     }
     if (err.status === 413) return 60_000;
     if (err.status === 401 || err.status === 403) return 10 * 60_000;
@@ -370,11 +393,24 @@ function coolDown(slot: Slot, err: unknown) {
 
 const isCoolingDown = (slot: Slot) => (cooldowns.get(slot.id) ?? 0) > Date.now();
 
+/** If every model is resting for less than half a minute, how long until the first is free (otherwise null). */
+function soonestFreeMs(slots: Slot[]): number | null {
+  const now = Date.now();
+  const waits = slots.map((s) => (cooldowns.get(s.id) ?? 0) - now);
+  if (waits.length === 0 || waits.some((w) => w <= 0)) return null;
+  const soonest = Math.min(...waits);
+  return soonest <= 30_000 ? soonest + 300 : null;
+}
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 /** A message for the person using the app. */
 export function aiErrorMessage(err: unknown, usedOwnKey: boolean): string {
+  const why = explainAiError(err);
+  if (why.kind === "size") return "This conversation is too long for the AI to read in one go. Open a shorter one, or shorten your notes in Settings.";
   if (usedOwnKey && err instanceof AiHttpError) {
-    if (err.status === 401 || err.status === 403) return "Groq did not accept your API key. Update it in Settings, or remove it to use the free shared AI.";
-    if (err.status === 429 || err.status === 413) return "Your Groq key has reached its own limit for now. Please try again in a few minutes.";
+    if (why.kind === "key") return "Groq did not accept your API key. Update it in Settings, or remove it to use the free shared AI.";
+    if (why.kind === "day") return "Your Groq key has used up its free daily allowance for these models. It frees up again within 24 hours (your Groq console shows the exact time under Limits).";
+    if (why.kind === "minute") return `Groq is limiting how much text your key can use per minute. Please try again in ${why.waitSeconds && why.waitSeconds > 1 ? `about ${why.waitSeconds} seconds` : "a few seconds"}.`;
   }
   return usedOwnKey
     ? "The AI did not answer with your Groq key. Please try again in a minute."
@@ -439,6 +475,7 @@ export async function generateEmails(prompt: string, contexts: (string | null)[]
   const emails: GeneratedEmail[] = [];
   let lastError: unknown;
 
+  for (let round = 0; round < 2; round++) {
   for (const slot of slots) {
     if (isCoolingDown(slot)) continue;
     try {
@@ -469,6 +506,11 @@ export async function generateEmails(prompt: string, contexts: (string | null)[]
       lastError = err;
     }
   }
+    // Every model is limited per minute: wait for the first one to free up, then try again once.
+    const wait = soonestFreeMs(slots);
+    if (round === 0 && wait !== null) await pause(wait);
+    else break;
+  }
   throw lastError ?? new Error("AI is busy: every model is cooling down after a rate limit");
 }
 
@@ -481,6 +523,7 @@ export async function completeJson(system: string, user: string, opts: AiOptions
   if (slots.length === 0) throw new Error("No AI provider configured");
 
   let lastError: unknown;
+  for (let round = 0; round < 2; round++) {
   for (const slot of slots) {
     if (isCoolingDown(slot)) continue;
     try {
@@ -490,6 +533,10 @@ export async function completeJson(system: string, user: string, opts: AiOptions
       coolDown(slot, err);
       lastError = err;
     }
+  }
+    const wait = soonestFreeMs(slots);
+    if (round === 0 && wait !== null) await pause(wait);
+    else break;
   }
   throw lastError ?? new Error("AI is busy: every model is cooling down after a rate limit");
 }

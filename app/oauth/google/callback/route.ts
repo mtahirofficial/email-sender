@@ -13,13 +13,13 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/compose?error=${encodeURIComponent("Google connection was cancelled.")}`, appUrl)
+      new URL(`/settings?error=${encodeURIComponent("Google connection was cancelled.")}`, appUrl)
     );
   }
 
   if (!code || !state || !expectedState || state !== expectedState) {
     return NextResponse.redirect(
-      new URL(`/compose?error=${encodeURIComponent("Invalid or expired connection request.")}`, appUrl)
+      new URL(`/settings?error=${encodeURIComponent("Invalid or expired connection request.")}`, appUrl)
     );
   }
 
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       // revoking access — Google only issues a refresh_token on first consent.
       return NextResponse.redirect(
         new URL(
-          `/compose?error=${encodeURIComponent(
+          `/settings?error=${encodeURIComponent(
             "Google didn't return a refresh token. Remove this app's access at https://myaccount.google.com/permissions and try connecting again."
           )}`,
           appUrl
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       const message =
         'Google did not give Outbox permission to send email. Connect again and keep every box ticked on Google\'s screen, especially "Send email on your behalf".';
       const failed = NextResponse.redirect(
-        new URL(`${sheetsFlow ? "/automation" : "/compose"}?error=${encodeURIComponent(message)}`, appUrl)
+        new URL(`${sheetsFlow ? "/automation" : "/settings"}?error=${encodeURIComponent(message)}`, appUrl)
       );
       failed.cookies.delete("google_oauth_state");
       failed.cookies.delete("google_oauth_sheets");
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     const returnTo = request.cookies.get("google_oauth_next")?.value;
     const safeReturn = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : null;
 
-    let destination = "/compose?connected=google";
+    let destination = "/settings?connected=google";
     if (inboxFlow) {
       destination = inboxGranted
         ? "/inbox?connected=inbox"
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error(err);
     return NextResponse.redirect(
-      new URL(`/compose?error=${encodeURIComponent("Could not connect this Gmail account.")}`, appUrl)
+      new URL(`/settings?error=${encodeURIComponent("Could not connect this Gmail account.")}`, appUrl)
     );
   }
 }

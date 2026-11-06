@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 // the cookie expired ...). Then the page still looks signed in, but every action says "Not signed in.".
 // This sends the person to the sign-in page instead: as soon as a request says the session is gone,
 // and also when they come back to the tab.
-const SIGNED_IN_AREAS = ["/compose", "/automation", "/inbox", "/sent", "/settings", "/admin", "/email-test"];
+const SIGNED_IN_AREAS = ["/compose", "/automation", "/inbox", "/sent", "/settings", "/profile", "/admin", "/email-test"];
 const isSignedInArea = (path: string) => SIGNED_IN_AREAS.some((area) => path === area || path.startsWith(`${area}/`));
 
 export default function SessionGuard() {
