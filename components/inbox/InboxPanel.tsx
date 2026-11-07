@@ -5,6 +5,7 @@ import Link from "next/link";
 import AiStatusNote from "@/components/AiStatusNote";
 import { AlertIcon, CheckIcon, SparkleIcon, SpinnerIcon, XIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
+import { useScrollLock } from "@/components/useScrollLock";
 import FullInbox, { senderAddress, type MailItem } from "@/components/inbox/FullInbox";
 
 type Status = "waiting" | "replied" | "answered" | "bounced" | "closed";
@@ -443,6 +444,7 @@ function Conversation({
   next: () => void;
 }) {
   const toast = useToast();
+  useScrollLock(); // the page behind the conversation does not scroll while it is open
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [text, setText] = useState(draft?.body ?? "");
@@ -542,7 +544,7 @@ function Conversation({
           </button>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4">
           {problem && (
             <p role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
               <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" /> {problem}

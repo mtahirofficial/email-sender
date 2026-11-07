@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useScrollLock } from "@/components/useScrollLock";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import { MailIcon, PlusIcon, ShieldIcon, UsersIcon } from "@/components/icons";
@@ -17,6 +18,7 @@ export default function ConnectAccounts({
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmGoogle, setConfirmGoogle] = useState(false);
+  useScrollLock(confirmGoogle);
 
   useEffect(() => {
     if (!confirmGoogle) return;
