@@ -14,7 +14,8 @@ import { OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const revalidate = 3600;
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await props.params;
   const post = await getPublishedPost(params.slug);
   if (!post) return { title: "Article not found", robots: { index: false } };
 
@@ -38,7 +39,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
-export default async function BlogPostPage({ params }: { params: { slug: string } }) {
+export default async function BlogPostPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const [post, all] = await Promise.all([getPublishedPost(params.slug), getPublishedPosts()]);
   if (!post) notFound();
 

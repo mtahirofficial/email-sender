@@ -58,6 +58,14 @@ export const CheckIcon = ({ className }: IconProps) => (
     <path d="m5 12.5 4.5 4.5L19 7.5" />
   </Svg>
 );
+export const DashboardIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <rect x="3" y="3" width="8" height="8" rx="1.5" />
+    <rect x="13" y="3" width="8" height="5" rx="1.5" />
+    <rect x="13" y="10" width="8" height="11" rx="1.5" />
+    <rect x="3" y="13" width="8" height="8" rx="1.5" />
+  </Svg>
+);
 export const XIcon = ({ className }: IconProps) => (
   <Svg className={className}>
     <path d="M6 6l12 12M18 6 6 18" />

@@ -31,7 +31,7 @@ const COLUMNS = "id, account_id, email, status, error, send_after, sent_at, crea
 
 /** Today's sending log, grouped by the account the emails go out from. Everything comes from the database, so a refresh keeps it. */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

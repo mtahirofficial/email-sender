@@ -12,7 +12,7 @@ import { InboxError } from "@/lib/inbox";
  * permission problems answer 409 so they are never mistaken for a lost session.
  */
 export async function inboxRoute(fn: (ctx: { supabase: SupabaseClient; user: User }) => Promise<unknown>) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

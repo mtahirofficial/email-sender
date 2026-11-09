@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { hasSupabaseSession } from "@/lib/supabase/session-cookie";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Nothing to refresh without a session, so skip the Supabase round trip.
   if (!hasSupabaseSession(request.cookies.getAll())) return NextResponse.next();
   return await updateSession(request);

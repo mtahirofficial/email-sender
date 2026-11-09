@@ -14,7 +14,7 @@ type Item = { row: number; website: string | null; email: string; subject: strin
 // Sends up to 10 reviewed emails (one separate message each, from the account it was assigned to),
 // records them, then marks them in the sheet.
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

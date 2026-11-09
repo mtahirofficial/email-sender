@@ -12,6 +12,8 @@ import {
   getThreadMeta,
   listInboxPage,
   listRecentInboundThreadIds,
+  markThreadRead,
+  setMessageStarred,
   type ThreadMessage,
 } from "@/lib/gmail-read";
 import { draftFollowUp, draftReply } from "@/lib/inbox-ai";
@@ -268,6 +270,19 @@ export async function listMailPage(supabase: SupabaseClient, userId: string, acc
   if (!account.inbox_enabled) throw new InboxError("Allow Outbox to read this Gmail account first.", 409, { needsPermission: true });
   const { accessToken } = await getValidAccessToken(supabase, userId, accountId);
   return listInboxPage(accessToken, opts);
+}
+
+export async function updateInboxMail(supabase: SupabaseClient, userId: string, input: { account: string; threadId: string; messageId?: string; action: "mark-read" | "star" | "unstar" }) {
+  if (!/^[0-9a-fA-F-]{36}$/.test(input.account) || !/^[A-Za-z0-9_-]{6,64}$/.test(input.threadId)) throw new InboxError("Choose a message first.", 400);
+  if (input.action !== "mark-read" && (!input.messageId || !/^[A-Za-z0-9_-]{6,64}$/.test(input.messageId))) throw new InboxError("Choose a message first.", 400);
+  const accounts = await listConnectedAccounts(supabase, userId);
+  const account = accounts.find((a) => a.id === input.account);
+  if (!account || account.provider !== "google") throw new InboxError("Choose a Gmail account.", 400);
+  if (!account.inbox_enabled) throw new InboxError("Allow Outbox to manage this Gmail inbox first.", 409, { needsPermission: true });
+  const { accessToken } = await getValidAccessToken(supabase, userId, account.id);
+  if (input.action === "mark-read") await markThreadRead(accessToken, input.threadId);
+  else await setMessageStarred(accessToken, input.messageId!, input.action === "star");
+  return { ok: true };
 }
 
 /** The conversation as readable messages. Read from Gmail now, not stored. */

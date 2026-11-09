@@ -19,12 +19,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function EmailTestPage({
-  searchParams,
-}: {
-  searchParams: { test?: string };
-}) {
-  const supabase = createClient();
+export default async function EmailTestPage(
+  props: {
+    searchParams: Promise<{ test?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

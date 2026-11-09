@@ -4,7 +4,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 // Permanently deletes the signed-in user. Connected mailboxes, sent history
 // and test data are removed too (they reference auth.users with ON DELETE CASCADE).
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

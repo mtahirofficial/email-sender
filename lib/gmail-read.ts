@@ -211,7 +211,7 @@ export function analyzeThread(messages: ThreadMessage[], accountEmail: string): 
 
 // ---- the whole inbox, one page at a time -------------------------------------
 
-export type MailListItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; isReply: boolean };
+export type MailListItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean };
 
 export const INBOX_PAGE_SIZE = 50;
 
@@ -248,6 +248,7 @@ export async function listInboxPage(accessToken: string, opts: { pageToken?: str
             snippet: decodeEntities(raw.snippet ?? ""),
             at: Number(raw.internalDate ?? 0),
             unread: (raw.labelIds ?? []).includes("UNREAD"),
+            starred: (raw.labelIds ?? []).includes("STARRED"),
             isReply: Boolean(h("In-Reply-To")) || /^\s*re:/i.test(subject),
           };
         } catch (err) {
@@ -258,4 +259,29 @@ export async function listInboxPage(accessToken: string, opts: { pageToken?: str
     })
   );
   return { items: found.filter((m): m is MailListItem => m !== null), nextPageToken: list.nextPageToken ?? null };
+}
+
+async function gmailModify(accessToken: string, path: string, body: { addLabelIds?: string[]; removeLabelIds?: string[] }) {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {
+      throw new GoogleReadScopeError("This account did not allow Outbox to manage inbox messages.");
+    }
+    throw new GmailApiError(res.status, `Gmail ${res.status}: ${text.slice(0, 300)}`);
+  }
+}
+
+export function markThreadRead(accessToken: string, threadId: string) {
+  return gmailModify(accessToken, `/threads/${encodeURIComponent(threadId)}/modify`, { removeLabelIds: ["UNREAD"] });
+}
+
+export function setMessageStarred(accessToken: string, messageId: string, starred: boolean) {
+  return gmailModify(accessToken, `/messages/${encodeURIComponent(messageId)}/modify`, starred ? { addLabelIds: ["STARRED"] } : { removeLabelIds: ["STARRED"] });
 }

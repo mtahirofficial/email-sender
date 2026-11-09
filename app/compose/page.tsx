@@ -17,7 +17,7 @@ import { InboxIcon, SheetIcon } from "@/components/icons";
 export const metadata: Metadata = { title: "Compose", robots: { index: false, follow: false } };
 
 export default async function ComposePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

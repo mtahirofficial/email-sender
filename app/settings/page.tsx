@@ -15,7 +15,7 @@ import InboxSettingsForm from "@/components/InboxSettingsForm";
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
 export default async function SettingsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -7,7 +7,7 @@ export const maxDuration = 60;
 // Reads the sheet fresh and hands the next unsent addresses to each sending account,
 // up to what is left of that account's daily limit.
 export async function POST() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

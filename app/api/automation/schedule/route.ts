@@ -6,7 +6,7 @@ import { queueSummary, runTickForUser } from "@/lib/scheduler";
 export const maxDuration = 60;
 
 async function authed() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Scheduler", robots: { index: false, 
 export const dynamic = "force-dynamic";
 
 export default async function SchedulerPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

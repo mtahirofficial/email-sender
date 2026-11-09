@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.redirect(new URL(`/compose?error=${message}`, process.env.NEXT_PUBLIC_APP_URL));
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

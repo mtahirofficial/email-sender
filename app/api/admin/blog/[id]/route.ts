@@ -13,7 +13,8 @@ function revalidateBlog(...slugs: (string | undefined)[]) {
   for (const slug of slugs) if (slug) revalidatePath(`/blog/${slug}`);
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
   if (!UUID.test(params.id)) return NextResponse.json({ error: "Not found." }, { status: 404 });
@@ -48,7 +49,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
   if (!UUID.test(params.id)) return NextResponse.json({ error: "Not found." }, { status: 404 });

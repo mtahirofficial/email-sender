@@ -12,7 +12,7 @@ function redirectUri() {
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 // Reading replies is a separate, optional permission (Google calls it a "restricted" scope).
-export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 
 /**
  * Google lets people untick single permissions on its consent screen, so a
@@ -52,7 +52,7 @@ export function getGoogleAuthUrl(state: string, withSheets = false, withInbox = 
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: redirectUri(),
     response_type: "code",
-    // gmail.send only lets this app send mail. Reading replies (gmail.readonly) is asked for only when someone turns on the inbox.
+    // gmail.send only sends mail. Gmail modify access is requested only when someone turns on the inbox, to allow read and star actions.
     scope: [
       GMAIL_SEND_SCOPE,
       "https://www.googleapis.com/auth/userinfo.email",

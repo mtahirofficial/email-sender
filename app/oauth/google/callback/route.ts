@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     const sheetsGranted = (tokens.scope ?? "").includes("/auth/spreadsheets");
     const inboxFlow = request.cookies.get("google_oauth_inbox")?.value === "1";
-    const inboxGranted = (tokens.scope ?? "").includes("/auth/gmail.readonly");
+    const inboxGranted = (tokens.scope ?? "").includes("/auth/gmail.modify");
 
     await saveConnectedAccount(supabase, {
       userId: user.id,

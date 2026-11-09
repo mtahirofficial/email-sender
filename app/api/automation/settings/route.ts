@@ -8,7 +8,7 @@ export const maxDuration = 60;
 const COLUMN = /^[A-Za-z]$/;
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -73,13 +73,28 @@ export async function POST(request: NextRequest) {
       throw new AutomationError(`No email addresses found in column ${emailCol} of "${sheetTitle}"${useFilter ? ` (rows where column ${filterColRaw.toUpperCase()} is "${filterValue}")` : ""}. Check the column letters.`);
     }
 
-    let { error } = await supabase.from("outreach_settings").upsert({ ...settings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    const saveSettings = async (values: Record<string, unknown>) => {
+      const { data: existingRows, error: lookupError } = await supabase.from("outreach_settings").select("*").eq("user_id", user.id).order("updated_at", { ascending: false });
+      if (lookupError) return { error: lookupError };
+      if (existingRows?.length === 1) return supabase.from("outreach_settings").update(values).eq("user_id", user.id);
+      if (existingRows && existingRows.length > 1) {
+        // Some deployed databases are missing the intended user_id uniqueness constraint.
+        // Keep the newest settings row, merge the import values, and repair duplicates.
+        const merged = { ...existingRows[0], ...values };
+        const { error: deleteError } = await supabase.from("outreach_settings").delete().eq("user_id", user.id);
+        if (deleteError) return { error: deleteError };
+        return supabase.from("outreach_settings").insert(merged);
+      }
+      return supabase.from("outreach_settings").insert(values);
+    };
+
+    let { error } = await saveSettings({ ...settings, updated_at: new Date().toISOString() });
     if (error && /extra_cols/i.test(error.message ?? "")) {
       // the column does not exist yet (migration not run): everything else still saves
       if (extraCols.length > 0) throw new AutomationError("To use extra columns, run supabase/migrations_add_extra_columns.sql in the Supabase SQL Editor first.");
       const { extra_cols: _unused, ...rest } = settings as OutreachSettings & { extra_cols?: unknown };
       void _unused;
-      ({ error } = await supabase.from("outreach_settings").upsert({ ...rest, updated_at: new Date().toISOString() }, { onConflict: "user_id" }));
+      ({ error } = await saveSettings({ ...rest, updated_at: new Date().toISOString() }));
     }
     if (error) throw error;
 

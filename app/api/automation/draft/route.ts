@@ -8,7 +8,7 @@ import { AutomationError, automationErrorResponse, getSettings } from "@/lib/aut
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function authed() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

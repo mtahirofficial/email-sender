@@ -11,7 +11,7 @@ import SiteFooter from "@/components/marketing/SiteFooter";
 export const metadata: Metadata = { title: "Inbox", robots: { index: false, follow: false } };
 
 export default async function InboxPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
