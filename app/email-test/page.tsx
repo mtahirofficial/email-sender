@@ -5,9 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listConnectedAccounts } from "@/lib/accounts";
 import { isAdminUser } from "@/lib/admin";
 import { listTrackingTests, getOwnedTrackingTest, getTrackingResults } from "@/lib/email-test/store";
-import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
-import { toHeaderUser } from "@/lib/header-user";
 import EmailTestNewForm from "@/components/EmailTestNewForm";
 import EmailTestSendForm from "@/components/EmailTestSendForm";
 import EmailTestResults from "@/components/EmailTestResults";
@@ -51,7 +49,6 @@ export default async function EmailTestPage({
 
   return (
     <>
-      <SiteHeader initialUser={toHeaderUser(user)} />
 
       <main id="main" className="mx-auto w-full flex-1 max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="font-serif text-3xl text-ink">HTML tracking element test</h1>

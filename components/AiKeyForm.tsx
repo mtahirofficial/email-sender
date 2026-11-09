@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertIcon, CheckIcon, SpinnerIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
+import { useConfirmAction } from "@/components/ConfirmAction";
 
 type Status = { hasKey: boolean; hint: string | null; limit: number; used: number; remaining: number | null };
 type Notice = { ok: boolean; text: string } | null;
@@ -10,6 +11,7 @@ type Notice = { ok: boolean; text: string } | null;
 /** Settings card: use the free shared AI, or add your own Groq key to write drafts with it. */
 export default function AiKeyForm() {
   const toast = useToast();
+  const { askToConfirm, confirmationDialog } = useConfirmAction();
   const [status, setStatus] = useState<Status | null>(null);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,6 +76,7 @@ export default function AiKeyForm() {
 
   return (
     <section id="ai" className="card scroll-mt-24 p-5 sm:p-7">
+      {confirmationDialog}
       <h2 className="font-serif text-xl text-ink">AI writing</h2>
       <p className="mb-4 mt-1 text-sm leading-relaxed text-ink-soft">
         Outbox writes your drafts with a free shared AI{status ? `, up to ${status.limit} drafts a day for each account` : ""}. If you want more,
@@ -126,7 +129,7 @@ export default function AiKeyForm() {
             {busy ? <SpinnerIcon /> : null} Save key
           </button>
           {status?.hasKey && (
-            <button type="button" onClick={remove} disabled={busy} className="btn-ghost">
+            <button type="button" onClick={() => askToConfirm({ title: "Remove your Groq key?", description: "Your drafts will switch back to the free shared AI. You can add a key again any time.", confirmLabel: "Remove key", action: remove })} disabled={busy} className="btn-ghost">
               Remove key
             </button>
           )}

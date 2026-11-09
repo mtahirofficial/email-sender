@@ -102,7 +102,7 @@ export default function AiGenerateModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="ai-title"
-        className="card max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-b-none p-5 sm:rounded-2xl sm:rounded-b-2xl sm:p-6"
+        className="card max-h-[92vh] overflow-y-auto rounded-b-none p-5 sm:rounded-2xl sm:rounded-b-2xl sm:p-6"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
@@ -137,11 +137,10 @@ export default function AiGenerateModal({
                       setPrompt(preset.prompt);
                       textareaRef.current?.focus();
                     }}
-                    className={`min-h-[40px] rounded-full border px-3.5 text-xs transition-colors ${
-                      selected
+                    className={`min-h-[40px] rounded-full border px-3.5 text-xs transition-colors ${selected
                         ? "border-accent bg-accent-soft font-medium text-accent-deep"
                         : "border-line bg-white text-ink-soft hover:border-accent hover:text-ink"
-                    }`}
+                      }`}
                   >
                     {preset.label}
                   </button>
@@ -161,25 +160,22 @@ export default function AiGenerateModal({
           required
           rows={7}
           minLength={10}
-          maxLength={1500}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="e.g. Invite them to a 30-minute product demo next Tuesday at 4 pm. Friendly but professional, and ask them to reply with a time that suits them."
           className="input resize-y"
         />
-        <p className="mt-1 text-right text-xs text-ink-soft">{prompt.length}/1500</p>
 
         <label
-          className={`mt-2 flex min-h-[44px] items-start gap-3 rounded-lg border border-line bg-paper px-3 py-2.5 ${
-            canSeparate ? "cursor-pointer" : "cursor-not-allowed opacity-60"
-          }`}
+          className={`mt-2 flex min-h-[44px] items-start gap-3 rounded-lg border border-line bg-paper px-3 py-2.5 ${canSeparate ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+            }`}
         >
           <input
             type="checkbox"
             checked={wantsSeparate}
             disabled={!canSeparate}
             onChange={(e) => setSeparate(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#2E5D50]"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
           />
           <span className="text-sm text-ink">
             Write a different message for each recipient
@@ -220,8 +216,8 @@ export default function AiGenerateModal({
                   ? `Writing ${Math.min(progress.done + BATCH, progress.total)} of ${progress.total}…`
                   : "Writing…"
                 : wantsSeparate
-                ? `Generate ${total} versions`
-                : "Generate"}
+                  ? `Generate ${total} versions`
+                  : "Generate"}
             </button>
           </div>
         </div>

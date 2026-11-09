@@ -23,7 +23,7 @@ export async function inboxRoute(fn: (ctx: { supabase: SupabaseClient; user: Use
   } catch (err) {
     if (err instanceof InboxError) return NextResponse.json({ error: err.message, ...err.extra }, { status: err.status });
     if (err instanceof GoogleReadScopeError) {
-      return NextResponse.json({ error: "Allow Outbox to read replies for this Gmail account first.", needsPermission: true }, { status: 409 });
+      return NextResponse.json({ error: "Allow Outbox to manage this Gmail inbox first.", needsPermission: true }, { status: 409 });
     }
     if (err instanceof AccountAuthError) {
       const info = accountErrorInfo(err);

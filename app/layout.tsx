@@ -1,9 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Source_Serif_4 } from "next/font/google";
+import { Dosis, Inter, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 import ToastProvider from "@/components/Toaster";
 import SessionGuard from "@/components/SessionGuard";
+import WorkspaceChrome from "@/components/WorkspaceChrome";
+import ThemeBootstrap from "@/components/ThemeBootstrap";
+import FloatingThemeToggle from "@/components/FloatingThemeToggle";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -17,6 +20,13 @@ const sourceSerif = Source_Serif_4({
   variable: "--font-serif",
   display: "swap",
   weight: ["400", "600"],
+});
+
+const dosis = Dosis({
+  subsets: ["latin"],
+  variable: "--font-brand",
+  display: "swap",
+  weight: "variable",
 });
 
 export const metadata: Metadata = {
@@ -35,12 +45,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#FAFAF7",
+  themeColor: "#F7F8FC",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${sourceSerif.variable}`}>
+    <html lang="en" className={`${inter.variable} ${sourceSerif.variable} ${dosis.variable}`}>
       <body className="flex min-h-screen flex-col font-sans antialiased">
         <a
           href="#main"
@@ -50,6 +60,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <ToastProvider>
           <SessionGuard />
+          <ThemeBootstrap />
+          <WorkspaceChrome />
+          <FloatingThemeToggle />
           {children}
         </ToastProvider>
       </body>

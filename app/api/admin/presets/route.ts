@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
 
   const label = typeof body?.label === "string" ? body.label.trim() : "";
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-  const fieldsOk = label.length >= 2 && label.length <= 40 && prompt.length >= 10 && prompt.length <= 1500;
-  const fieldsError = "Name must be 2 to 40 characters and the prompt 10 to 1500.";
+  const fieldsOk = label.length >= 2 && label.length <= 40 && prompt.length >= 10;
+  const fieldsError = "Name must be 2 to 40 characters and the prompt at least 10 characters.";
 
   switch (body?.action) {
     case "create": {

@@ -5,30 +5,32 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        paper: "#FAFAF7",
-        mist: "#F1F4F0",
-        ink: "#16233A",
-        "ink-soft": "#4A5568",
-        line: "#E2E1DB",
+        paper: "rgb(var(--paper) / <alpha-value>)",
+        mist: "rgb(var(--mist) / <alpha-value>)",
+        surface: "rgb(var(--surface) / <alpha-value>)",
+        ink: "rgb(var(--ink) / <alpha-value>)",
+        "ink-soft": "rgb(var(--ink-soft) / <alpha-value>)",
+        line: "rgb(var(--line) / <alpha-value>)",
         accent: {
-          DEFAULT: "#2E5D50",
-          soft: "#E8EFEC",
-          deep: "#1E4038",
+          DEFAULT: "rgb(var(--accent) / <alpha-value>)",
+          soft: "rgb(var(--accent-soft) / <alpha-value>)",
+          deep: "rgb(var(--accent-deep) / <alpha-value>)",
         },
         // Darkened from the earlier ochre so small text passes WCAG AA contrast.
         amber: {
-          DEFAULT: "#955A1E",
-          soft: "#F6ECE0",
+          DEFAULT: "rgb(var(--amber) / <alpha-value>)",
+          soft: "rgb(var(--amber-soft) / <alpha-value>)",
         },
         sun: "#C9922E",
       },
       fontFamily: {
+        brand: ["var(--font-brand)", "sans-serif"],
         serif: ["var(--font-serif)", "Georgia", "serif"],
         sans: ["var(--font-sans)", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(22,35,58,0.05), 0 12px 32px -18px rgba(22,35,58,0.18)",
-        lift: "0 2px 4px rgba(22,35,58,0.06), 0 28px 56px -24px rgba(22,35,58,0.32)",
+        card: "0 1px 2px rgba(23,26,43,0.04), 0 10px 28px -18px rgba(42,41,74,0.16)",
+        lift: "0 2px 6px rgba(23,26,43,0.06), 0 24px 48px -22px rgba(42,41,74,0.26)",
       },
     },
   },

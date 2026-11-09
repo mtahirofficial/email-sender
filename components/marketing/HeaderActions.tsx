@@ -17,7 +17,7 @@ export default function HeaderActions() {
 
   if (signedIn) {
     return (
-      <Link href="/" className="btn-primary">
+      <Link href="/dashboard" className="btn-primary">
         Dashboard
       </Link>
     );

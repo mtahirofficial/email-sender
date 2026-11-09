@@ -80,13 +80,14 @@ export default function PrivacyPage() {
         mark next to addresses it has emailed. This permission is optional and is requested separately from sending mail.
       </p>
       <p>
-        If you turn on the <strong>Inbox</strong> for a Gmail account we also request <strong>gmail.readonly</strong>.
+        If you turn on the <strong>Inbox</strong> for a Gmail account we also request <strong>gmail.modify</strong>.
         Google cannot limit this permission to replies. {SITE_NAME} uses it to show your inbox (sender, subject and a short preview, read
         from Gmail each time and not stored) and to find replies to emails it sent for you. We store, per person you emailed, their address, the subject, the status of the conversation and a short
         snippet (up to 300 characters) of their latest reply. The full text of messages is read from Gmail only when you
         open a conversation and is <strong>not stored</strong>. When you ask for a suggested reply or follow-up, the
         text of that conversation is sent to our AI provider (Groq) only to write that suggestion; nothing is sent
         automatically and you review everything before it is sent. This permission is optional and you can turn it off
+        You can also mark a thread as read or star and unstar individual messages from the Inbox. {SITE_NAME} does not delete messages. This permission is optional and you can turn it off
         by removing {SITE_NAME} at myaccount.google.com/permissions.
       </p>
       <p>
@@ -109,11 +110,13 @@ export default function PrivacyPage() {
 
       <h2>AI-assisted drafting</h2>
       <p>
-        If you use &ldquo;Generate with AI&rdquo;, the instructions you type are sent to an AI provider, Groq or
-        Google (Gemini), which writes a draft. We do not send recipient addresses or the contents of your mailbox.
+        If you use &ldquo;Generate with AI&rdquo;, the instructions you type are sent to an AI provider, such as Groq,
+        Google (Gemini) or Mistral, which writes a draft. For spreadsheet automation, saved instructions and AI notes,
+        each recipient&rsquo;s website and selected extra column values are also sent to the provider to write each email.
+        Recipient email addresses and the contents of your mailbox are not sent.
         Depending on the provider and plan, text sent to a free service may be retained or used by that provider to
         improve its services, so please do not put passwords or confidential information in your instructions. We
-        keep only a daily count of drafts per account to apply fair-use limits; we do not store the instructions you type in the compose window or the drafts the AI writes. If you use spreadsheet automation, we store the instructions you save there so they can be reused each day.
+        keep only a daily count of drafts per account to apply fair-use limits; we do not store the instructions you type in the compose window or the drafts the AI writes. If you use spreadsheet automation, we store the instructions and AI notes you save there so they can be reused each day.
       </p>
 
       <h2>Cookies</h2>

@@ -12,10 +12,10 @@ const BENEFITS = [
   "Send-only access. Your inbox stays private",
 ];
 
-/** Where to go after signing in: the page they were on (only paths inside this site), else the home page. */
+/** Where to go after signing in: the page they were on (only paths inside this site), else the overview. */
 function nextPath() {
   const next = new URLSearchParams(window.location.search).get("next") ?? "";
-  return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
+  return next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/dashboard";
 }
 
 export default function LoginPage() {
@@ -72,10 +72,10 @@ export default function LoginPage() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[0.9fr_1.1fr]">
-      <aside className="relative hidden flex-col justify-between overflow-hidden bg-accent-deep p-12 text-white lg:flex">
+      <aside className="login-brand-panel relative hidden flex-col justify-between overflow-hidden p-12 text-white lg:flex">
         <Link href="/" className="flex items-center gap-2.5" aria-label="Outbox home">
-          <Logo className="h-10 w-10" onDark />
-          <span className="font-serif text-2xl">Outbox</span>
+          <Logo className="h-11 w-24" />
+          <span className="font-brand text-2xl font-semibold tracking-wide">Outbox</span>
         </Link>
 
         <div>
@@ -95,11 +95,11 @@ export default function LoginPage() {
         <div className="airmail absolute inset-x-0 bottom-0 h-3" aria-hidden="true" />
       </aside>
 
-      <main id="main" className="flex items-center justify-center px-5 py-12">
+      <main id="main" className="relative flex items-center justify-center px-5 py-12">
         <div className="w-full max-w-sm">
-          <Link href="/" className="mb-8 flex items-center gap-2.5 lg:hidden" aria-label="Outbox home">
-            <Logo className="h-9 w-9" />
-            <span className="font-serif text-2xl text-ink">Outbox</span>
+          <Link href="/" className="mb-8 flex items-center gap-2.5 pr-12 lg:hidden" aria-label="Outbox home">
+            <Logo className="h-9 w-20" />
+            <span className="font-brand text-2xl font-semibold tracking-wide text-ink">Outbox</span>
           </Link>
 
           <h1 className="font-serif text-3xl text-ink">{isSignIn ? "Welcome back" : "Create your account"}</h1>

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { automationErrorResponse, getSettings, todayIn } from "@/lib/automation";
 
@@ -30,7 +30,7 @@ const SENDING_WINDOW_MS = 2 * 60 * 1000; // an email picked up less than this lo
 const COLUMNS = "id, account_id, email, status, error, send_after, sent_at, created_at";
 
 /** Today's sending log, grouped by the account the emails go out from. Everything comes from the database, so a refresh keeps it. */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = createClient();
   const {
     data: { user },
@@ -38,12 +38,12 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   try {
-    const settings = await getSettings(supabase, user.id);
+    const settings = await getSettings(supabase, user.id, request.nextUrl.searchParams.get("automationId"));
     if (!settings) return NextResponse.json({ configured: false, accounts: [], now: new Date().toISOString() });
     const day = todayIn(settings.timezone);
 
     const queueQuery = (cols: string) =>
-      supabase.from("outreach_queue").select(cols).eq("user_id", user.id).eq("day", day).order("send_after", { ascending: true }).limit(1000);
+      supabase.from("outreach_queue").select(cols).eq("user_id", user.id).eq("spreadsheet_id", settings.spreadsheet_id).eq("day", day).order("send_after", { ascending: true }).limit(1000);
     let queueRes = await queueQuery(`${COLUMNS}, sending_at`);
     if (queueRes.error && /sending_at/i.test(queueRes.error.message ?? "")) queueRes = await queueQuery(COLUMNS); // migration not run yet
     if (queueRes.error) throw queueRes.error;

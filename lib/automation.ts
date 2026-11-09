@@ -6,6 +6,7 @@ import { sendOutlookMail } from "@/lib/microsoft";
 import { SheetsError, colIndex, paintSentCells, parseExtraCols, parseSheet, readValues, writeCells, type ExtraColumn, type SheetItem } from "@/lib/sheets";
 
 export type OutreachSettings = {
+  id: string;
   user_id: string;
   account_id: string | null; // the Gmail account that has Google Sheets access
   spreadsheet_id: string;
@@ -17,6 +18,7 @@ export type OutreachSettings = {
   filter_value: string | null;
   extra_cols?: ExtraColumn[]; // optional extra columns whose values the AI may use
   prompt: string;
+  ai_notes?: string;
   timezone: string;
   schedule_enabled: boolean;
   schedule_time: string; // HH:MM in `timezone`
@@ -46,8 +48,16 @@ export function automationErrorResponse(err: unknown) {
   return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
 }
 
-export async function getSettings(supabase: SupabaseClient, userId: string): Promise<OutreachSettings | null> {
-  const { data, error } = await supabase.from("outreach_settings").select("*").eq("user_id", userId).maybeSingle();
+export async function listSettings(supabase: SupabaseClient, userId: string): Promise<OutreachSettings[]> {
+  const { data, error } = await supabase.from("outreach_settings").select("*").eq("user_id", userId).order("updated_at", { ascending: true });
+  if (error) throw error;
+  return (data as OutreachSettings[] | null) ?? [];
+}
+
+export async function getSettings(supabase: SupabaseClient, userId: string, settingsId?: string | null): Promise<OutreachSettings | null> {
+  let query = supabase.from("outreach_settings").select("*").eq("user_id", userId);
+  if (settingsId) query = query.eq("id", settingsId);
+  const { data, error } = await query.order("updated_at", { ascending: true }).limit(1).maybeSingle();
   if (error) throw error;
   return (data as OutreachSettings | null) ?? null;
 }
@@ -179,12 +189,14 @@ export async function computePending(supabase: SupabaseClient, accessToken: stri
 
 export type Sender = { accountId: string; email: string; provider: Provider; limit: number; enabled: boolean; needsReconnect: boolean };
 
-/** Every connected account with its per-account daily limit (default 20, enabled). */
-export async function listSenders(supabase: SupabaseClient, userId: string): Promise<Sender[]> {
+/** A new sheet may choose from every connected account; a configured sheet uses only its saved assignments. */
+export async function listSenders(supabase: SupabaseClient, userId: string, automationId?: string): Promise<Sender[]> {
   const accounts = await listConnectedAccounts(supabase, userId);
-  const { data } = await supabase.from("outreach_senders").select("account_id, daily_limit, enabled").eq("user_id", userId);
+  const { data } = automationId
+    ? await supabase.from("outreach_senders").select("account_id, daily_limit, enabled").eq("user_id", userId).eq("automation_id", automationId)
+    : { data: null };
   const config = new Map((data ?? []).map((r) => [r.account_id as string, r]));
-  return accounts.map((a) => ({
+  return accounts.filter((a) => !automationId || config.has(a.id)).map((a) => ({
     accountId: a.id,
     email: a.email,
     provider: a.provider,
@@ -199,7 +211,7 @@ export async function usedTodayByAccount(supabase: SupabaseClient, settings: Out
   const day = todayIn(settings.timezone);
   const [{ data: sends }, { data: queued }] = await Promise.all([
     supabase.from("outreach_sends").select("account_id").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id).eq("sent_day", day),
-    supabase.from("outreach_queue").select("account_id").eq("user_id", settings.user_id).eq("day", day).eq("status", "pending"),
+    supabase.from("outreach_queue").select("account_id").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id).eq("day", day).eq("status", "pending"),
   ]);
   const used = new Map<string, number>();
   for (const row of [...(sends ?? []), ...(queued ?? [])]) {

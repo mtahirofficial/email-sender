@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin";
-import { toHeaderUser } from "@/lib/header-user";
-import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import PresetsManager, { type PresetRow } from "@/components/admin/PresetsManager";
 
@@ -26,7 +24,6 @@ export default async function AdminPresetsPage() {
 
   return (
     <>
-      <SiteHeader initialUser={toHeaderUser(user)} />
       <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="font-serif text-3xl text-ink">AI presets</h1>
         <p className="mb-6 mt-1 text-sm text-ink-soft">

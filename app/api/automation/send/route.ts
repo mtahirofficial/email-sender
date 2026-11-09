@@ -41,11 +41,11 @@ export async function POST(request: NextRequest) {
       return item;
     });
 
-    const settings = await getSettings(supabase, user.id);
+    const settings = await getSettings(supabase, user.id, body?.automationId);
     if (!settings) throw new AutomationError("Import a sheet first.");
 
     // Each sending account must stay inside its own daily limit.
-    const senders = new Map((await listSenders(supabase, user.id)).map((s) => [s.accountId, s]));
+    const senders = new Map((await listSenders(supabase, user.id, settings.id)).map((s) => [s.accountId, s]));
     const used = await usedTodayByAccount(supabase, settings);
     const wanted = new Map<string, number>();
     for (const item of items) {

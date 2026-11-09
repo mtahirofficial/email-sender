@@ -50,7 +50,7 @@ export function sendsOnWeekday(settings: { send_saturday?: boolean }, weekday: n
 export async function prepareDay(admin: SupabaseClient, settings: OutreachSettings): Promise<{ queued: number; note?: string }> {
   const { accessToken } = await getSheetsAccess(admin, settings.user_id, settings.account_id);
   const { pool } = await computePending(admin, accessToken, settings);
-  const senders = await listSenders(admin, settings.user_id);
+  const senders = await listSenders(admin, settings.user_id, settings.id);
   const used = await usedTodayByAccount(admin, settings);
   let plan = assignItems(pool, senders, used);
   if (plan.length === 0) return { queued: 0, note: "Nothing to send: every sender is at its limit, or no unsent addresses are left." };
@@ -81,7 +81,7 @@ export async function prepareDay(admin: SupabaseClient, settings: OutreachSettin
   for (let i = 0; i < plan.length; i += AI_BATCH) {
     const chunk = plan.slice(i, i + AI_BATCH);
     try {
-      const got = await generateEmails(settings.prompt, chunk.map((p) => ({ website: p.item.website, fields: p.item.fields })), { groqKey: access.ownKey });
+      const got = await generateEmails(settings.prompt, chunk.map((p) => ({ website: p.item.website, fields: p.item.fields })), { groqKey: access.ownKey, notes: settings.ai_notes ?? "" });
       written.push(...got);
       await addAiUsage(settings.user_id, chunk.length, usedNow);
       usedNow += chunk.length;
@@ -123,11 +123,18 @@ export async function prepareDay(admin: SupabaseClient, settings: OutreachSettin
 
 /** Sends the queued emails whose time has come, within a time budget. */
 export async function sendDue(admin: SupabaseClient, settings: OutreachSettings, budgetMs = 45_000) {
+  const activeAccountIds = (await listSenders(admin, settings.user_id, settings.id))
+    .filter((sender) => sender.enabled)
+    .map((sender) => sender.accountId);
+  if (activeAccountIds.length === 0) return { sent: 0, failed: 0 };
+
   const { data: due } = await admin
     .from("outreach_queue")
     .select("id, account_id, row_number, website, email, subject, body")
     .eq("user_id", settings.user_id)
+    .eq("spreadsheet_id", settings.spreadsheet_id)
     .eq("status", "pending")
+    .in("account_id", activeAccountIds)
     .lte("send_after", new Date().toISOString())
     .order("send_after", { ascending: true })
     .limit(30);
@@ -208,8 +215,8 @@ export async function sendDue(admin: SupabaseClient, settings: OutreachSettings,
 }
 
 /** One tick for one user: write today's emails if it is time, then send what is due. */
-export async function runTickForUser(admin: SupabaseClient, userId: string, opts: { force?: boolean } = {}) {
-  const settings = await getSettings(admin, userId);
+export async function runTickForUser(admin: SupabaseClient, userId: string, opts: { force?: boolean; automationId?: string } = {}) {
+  const settings = await getSettings(admin, userId, opts.automationId);
   if (!settings || !settings.schedule_enabled) return { prepared: 0, sent: 0, failed: 0, note: "Schedule is off." };
 
   let prepared = 0;
@@ -230,9 +237,9 @@ export async function runTickForUser(admin: SupabaseClient, userId: string, opts
       const { data } = await admin
         .from("outreach_settings")
         .update({ last_scheduled_day: day })
-        .eq("user_id", userId)
+        .eq("id", settings.id)
         .or(`last_scheduled_day.is.null,last_scheduled_day.neq.${day}`)
-        .select("user_id");
+        .select("id");
       claimed = (data?.length ?? 0) > 0;
     }
   }
@@ -242,7 +249,7 @@ export async function runTickForUser(admin: SupabaseClient, userId: string, opts
       const result = await prepareDay(admin, settings);
       prepared = result.queued;
       note = result.note;
-      await admin.from("outreach_settings").update({ last_scheduled_day: day, schedule_retry_at: null, schedule_error: note ?? null }).eq("user_id", userId);
+      await admin.from("outreach_settings").update({ last_scheduled_day: day, schedule_retry_at: null, schedule_error: note ?? null }).eq("id", settings.id);
     } catch (err) {
       const text = (err instanceof Error ? err.message : "Could not prepare today's run").slice(0, 300);
       console.error("scheduler: prepare failed", err);
@@ -250,7 +257,7 @@ export async function runTickForUser(admin: SupabaseClient, userId: string, opts
       await admin
         .from("outreach_settings")
         .update({ last_scheduled_day: settings.last_scheduled_day, schedule_error: text, schedule_retry_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() })
-        .eq("user_id", userId);
+        .eq("id", settings.id);
       note = text;
     }
   }
@@ -261,14 +268,14 @@ export async function runTickForUser(admin: SupabaseClient, userId: string, opts
 
 /** One tick for everyone who has the schedule switched on (used by cron). */
 export async function runTickForAll(admin: SupabaseClient) {
-  const { data } = await admin.from("outreach_settings").select("user_id").eq("schedule_enabled", true);
+  const { data } = await admin.from("outreach_settings").select("user_id, id").eq("schedule_enabled", true);
   const started = Date.now();
   let users = 0;
   let sent = 0;
   for (const row of data ?? []) {
     if (Date.now() - started > 40_000) break;
     try {
-      const result = await runTickForUser(admin, row.user_id);
+      const result = await runTickForUser(admin, row.user_id, { automationId: row.id });
       sent += result.sent;
       users++;
     } catch (err) {
@@ -278,9 +285,30 @@ export async function runTickForAll(admin: SupabaseClient) {
   return { users, sent };
 }
 
+/** One page-driven tick for every enabled automation owned by one signed-in user. */
+export async function runTickForUserAll(admin: SupabaseClient, userId: string) {
+  const { data } = await admin.from("outreach_settings").select("id").eq("user_id", userId).eq("schedule_enabled", true);
+  const started = Date.now();
+  let prepared = 0;
+  let sent = 0;
+  let failed = 0;
+  for (const row of data ?? []) {
+    if (Date.now() - started > 40_000) break;
+    try {
+      const result = await runTickForUser(admin, userId, { automationId: row.id });
+      prepared += result.prepared;
+      sent += result.sent;
+      failed += result.failed;
+    } catch (err) {
+      console.error("scheduler: page tick failed for an automation", err);
+    }
+  }
+  return { prepared, sent, failed };
+}
+
 /** Counts for today's queue, for the Automation page. */
-export async function queueSummary(supabase: SupabaseClient, userId: string, timezone: string) {
-  const { data } = await supabase.from("outreach_queue").select("status, send_after").eq("user_id", userId).eq("day", todayIn(timezone)).limit(1000);
+export async function queueSummary(supabase: SupabaseClient, userId: string, timezone: string, spreadsheetId: string) {
+  const { data } = await supabase.from("outreach_queue").select("status, send_after").eq("user_id", userId).eq("spreadsheet_id", spreadsheetId).eq("day", todayIn(timezone)).limit(1000);
   const rows = data ?? [];
   const pending = rows.filter((r) => r.status === "pending");
   return {

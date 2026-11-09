@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   // ?sheets=1 also asks for Google Sheets access (spreadsheet automation).
   const withSheets = request.nextUrl.searchParams.get("sheets") === "1";
-  // ?inbox=1 also asks to read replies (the Inbox feature).
+  // ?inbox=1 asks to read and manage messages in the Inbox feature.
   const withInbox = request.nextUrl.searchParams.get("inbox") === "1";
   const next = request.nextUrl.searchParams.get("next");
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;

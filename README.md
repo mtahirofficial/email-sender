@@ -269,13 +269,19 @@ website above it. Column D receives the tick. Any non-empty cell in column D
 counts as "already handled".
 
 **One-time setup**
-1. Run `supabase/migrations_add_automation.sql` in the Supabase SQL Editor.
+1. Run `supabase/migrations_add_automation.sql` in the Supabase SQL Editor. Existing installs must also run `supabase/migrations_add_multiple_automations.sql` after `migrations_add_reconnect_and_drafts.sql` and `migrations_add_scheduled_automation.sql` to link more than one sheet.
 2. Google Cloud Console: enable the **Google Sheets API**, and add the scope
    `https://www.googleapis.com/auth/spreadsheets` to the OAuth consent screen.
 3. In the app, Automation > **Enable Google Sheets** (one extra Google consent
    for the connected Gmail account), then import the sheet link.
 4. Sending uses the connected Gmail account, so keep each day's number inside
    Gmail's limits. `AI_DAILY_LIMIT` (default 40) is the free shared AI allowance; people who need more add their own Groq key in Settings.
+
+Each linked spreadsheet has its own prompt, sender limits, saved review batch,
+and daily schedule. Choose a linked sheet at the top of Automation to work on it;
+the scheduled runner checks every enabled sheet independently. Existing installs
+should run `supabase/migrations_add_multiple_automations.sql` once after the
+automation, reconnect-and-drafts, and scheduled-automation migrations.
 
 Notes: the Sheets scope is a sensitive Google scope, so beyond test users it needs
 Google's app verification (like `gmail.send`). Every send is recorded in the
@@ -308,7 +314,7 @@ the prompt box so the user can edit it. They work out of the box. To let the adm
 
 ## Scheduled automation (per-account limits, daily schedule)
 
-1. Run `supabase/migrations_add_scheduled_automation.sql` (after the earlier automation migrations).
+1. Run `supabase/migrations_add_scheduled_automation.sql` (after the earlier automation migrations), then run `supabase/migrations_add_multiple_automations.sql` to enable multiple independent sheets.
 2. Sheet layout: one row per website. Defaults: domain in B, all its emails in E (comma separated), a sent column F that
    receives `✓ address` marks, and only rows where D says `Yes` are used (change or clear this on the Automation page).
 3. On the Automation page set **Per day** for every sending account (Gmail and Outlook), then turn on the **Daily schedule**

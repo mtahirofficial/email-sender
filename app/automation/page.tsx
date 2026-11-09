@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin";
 import { getHeartbeat, isHeartbeatFresh } from "@/lib/scheduler";
-import { toHeaderUser } from "@/lib/header-user";
-import { getSettings, listSenders } from "@/lib/automation";
+import { listSettings, listSenders } from "@/lib/automation";
 import { getAiPresets } from "@/lib/ai-presets";
-import { InboxIcon } from "@/components/icons";
-import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import AlertBanner from "@/components/AlertBanner";
 import AutomationPanel, { type GoogleAccount, type SettingsView } from "@/components/automation/AutomationPanel";
-import SendLog from "@/components/automation/SendLog";
 
 export const metadata: Metadata = { title: "Automation", robots: { index: false, follow: false } };
 
@@ -36,11 +31,17 @@ export default async function AutomationPage() {
     accounts = (withFlag.data ?? []) as GoogleAccount[];
   }
 
-  let settings: SettingsView | null = null;
+  let settingsList: SettingsView[] = [];
+  let multipleSheetsReady = true;
   try {
-    const s = await getSettings(supabase, user.id);
-    if (s) {
-      settings = {
+    const list = await listSettings(supabase, user.id);
+    if (list.some((s) => !s.id)) {
+      multipleSheetsReady = false;
+      migrationMissing = true;
+    }
+    settingsList = list.map((s) => ({
+        // The legacy one-sheet table has no row id. Keep its saved sheet visible until the migration is applied.
+        id: s.id || `legacy:${s.spreadsheet_id}`,
         account_id: s.account_id,
         spreadsheet_id: s.spreadsheet_id,
         sheet_title: s.sheet_title,
@@ -51,33 +52,40 @@ export default async function AutomationPage() {
         filter_value: s.filter_value ?? null,
         extra_cols: Array.isArray(s.extra_cols) ? s.extra_cols : [],
         prompt: s.prompt,
+        ai_notes: s.ai_notes ?? "",
         schedule_enabled: Boolean(s.schedule_enabled),
         schedule_time: s.schedule_time ?? "10:00",
         send_saturday: Boolean(s.send_saturday),
         pause_seconds: s.pause_seconds ?? 90,
-      };
-    }
+      }));
   } catch {
     migrationMissing = true;
   }
 
-  const [senders, presets] = await Promise.all([listSenders(supabase, user.id), getAiPresets(supabase)]);
+  const [sendersByAutomation, defaultSenders, presets] = await Promise.all([
+    Promise.all(settingsList.map(async (s) => [s.id, await listSenders(supabase, user.id, s.id)] as const)),
+    listSenders(supabase, user.id),
+    getAiPresets(supabase),
+  ]);
   const lastTickAt = await getHeartbeat(createAdminClient()).catch(() => null);
+  const sheetsAccessAccount = accounts.find((account) => account.sheets_enabled);
 
   return (
     <>
-      <SiteHeader initialUser={toHeaderUser(user)} />
-      <main id="main" className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="font-serif text-3xl text-ink">Automation</h1>
-          <Link href="/sent" className="btn-secondary min-h-[40px] px-3.5 text-sm">
-            <InboxIcon className="h-4 w-4" /> Sent emails
-          </Link>
+      <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-4xl text-ink">Automation</h1>
+            <p className="mt-1 text-base text-ink-soft">Each linked sheet is its own workflow. Set the daily limits, pick a time, and let it run.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-sm text-ink">
+              <span className={`h-2.5 w-2.5 rounded-full ${sheetsAccessAccount ? "bg-emerald-600" : "bg-ink-soft/40"}`} />
+              {sheetsAccessAccount ? `Sheets access: ${sheetsAccessAccount.email}` : "Sheets access not enabled"}
+            </span>
+            <a href="/sent" className="btn-secondary min-h-11 px-5">Sent emails</a>
+          </div>
         </div>
-        <p className="mb-6 mt-1 max-w-2xl text-sm leading-relaxed text-ink-soft">
-          Link a Google Sheet of websites and email addresses. Outbox writes a subject and message for every address with AI and sends them
-          from your connected accounts, either when you press a button or automatically every day, and marks each address in your sheet.
-        </p>
 
         <Suspense fallback={null}>
           <AlertBanner />
@@ -85,19 +93,21 @@ export default async function AutomationPage() {
 
         {migrationMissing && (
           <p role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            The database isn&rsquo;t ready for this feature yet. Run supabase/migrations_add_automation.sql and
-            supabase/migrations_add_scheduled_automation.sql in the Supabase SQL Editor.
+            {multipleSheetsReady
+              ? <>The database isn&rsquo;t ready for automation yet. Run the automation migrations in the Supabase SQL Editor.</>
+              : <>Your existing linked sheet is preserved. Run <code>supabase/migrations_add_multiple_automations.sql</code> in the Supabase SQL Editor to restore full controls and add more sheets.</>}
           </p>
         )}
 
         <AutomationPanel
           accounts={accounts}
-          settings={settings}
-          senders={senders}
+          settingsList={settingsList}
+          sendersByAutomation={Object.fromEntries(sendersByAutomation)}
+          defaultSenders={defaultSenders}
+          multipleSheetsReady={multipleSheetsReady}
           presets={presets}
           background={{ active: isHeartbeatFresh(lastTickAt), isAdmin: isAdminUser(user) }}
         />
-        {settings && <SendLog />}
       </main>
       <SiteFooter />
     </>

@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     const sheetsGranted = (tokens.scope ?? "").includes("/auth/spreadsheets");
     const inboxFlow = request.cookies.get("google_oauth_inbox")?.value === "1";
-    const inboxGranted = (tokens.scope ?? "").includes("/auth/gmail.readonly");
+    const inboxGranted = (tokens.scope ?? "").includes("/auth/gmail.modify");
 
     await saveConnectedAccount(supabase, {
       userId: user.id,
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     if (inboxFlow) {
       destination = inboxGranted
         ? "/inbox?connected=inbox"
-        : `/inbox?error=${encodeURIComponent("Google did not give Outbox permission to read replies. Try again and keep the permission to read your email ticked on Google's screen.")}`;
+        : `/inbox?error=${encodeURIComponent("Google did not give Outbox permission to manage inbox messages. Try again and keep the inbox permission ticked on Google's screen.")}`;
     } else if (safeReturn && (!sheetsFlow || sheetsGranted)) {
       destination = `${safeReturn}${safeReturn.includes("?") ? "&" : "?"}connected=${sheetsFlow ? "sheets" : "google"}`;
     } else if (sheetsFlow) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isTransientAuthError } from "@/lib/supabase/auth-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET() {
     error,
   } = await supabase.auth.getUser();
 
-  const transient = Boolean(error && (error.name === "AuthRetryableFetchError" || (error.status ?? 0) >= 500));
+  const transient = isTransientAuthError(error);
   const signedIn = user ? true : transient ? null : false;
   return NextResponse.json({ signedIn }, { headers: { "Cache-Control": "no-store" } });
 }

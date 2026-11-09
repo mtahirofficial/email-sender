@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { AlertIcon, CheckIcon, SpinnerIcon } from "@/components/icons";
+import { useConfirmAction } from "@/components/ConfirmAction";
 
 type Status = "queued" | "sending" | "sent" | "failed";
 type Item = { to: string; status: Status; at: string; error?: string; since?: string };
@@ -18,17 +20,29 @@ const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-
  * database, so a refresh shows the same log. The next email of each sender has a see-through bar that fills
  * up until its send time; an email being sent pulses; a sent one says "Sent".
  */
-export default function SendLog() {
+export default function SendLog({
+  automationId,
+  title = "Sending log",
+  description = "Today’s emails, grouped by the address they are sent from. It updates by itself and is still here after a refresh.",
+  actions,
+}: {
+  automationId: string;
+  title?: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
   const [log, setLog] = useState<Log | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const { askToConfirm, confirmationDialog } = useConfirmAction();
   const [, setTick] = useState(0);
   const clockOffset = useRef(0); // server time minus this computer's time, so the bars are right even if the clock is off
   const active = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/automation/log", { cache: "no-store" });
+      const res = await fetch(`/api/automation/log?automationId=${encodeURIComponent(automationId)}`, { cache: "no-store" });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) throw new Error(data?.error ?? "Could not load the sending log.");
       clockOffset.current = Date.parse(data.now) - Date.now();
@@ -38,7 +52,23 @@ export default function SendLog() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load the sending log.");
     }
-  }, []);
+  }, [automationId]);
+
+  async function cancelAccount(account: Account) {
+    setCancellingId(account.id);
+    try {
+      const res = await fetch("/api/automation/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel-account", automationId, accountId: account.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `Could not cancel queued emails for ${account.email}.`);
+      await load();
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   // Fetch now, then every 3 seconds while something is queued or sending (every 20 seconds otherwise).
   useEffect(() => {
@@ -136,19 +166,23 @@ export default function SendLog() {
   }
 
   return (
-    <section className="card mt-6 p-5 sm:p-7" aria-labelledby="send-log-title">
+    <section className="card p-5 sm:p-7" aria-labelledby="send-log-title">
+      {confirmationDialog}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="send-log-title" className="font-serif text-xl text-ink">
-          Sending log
+        <h2 id="send-log-title" className="font-serif text-2xl text-ink">
+          {title}
         </h2>
-        {log?.active && (
-          <span className="flex items-center gap-2 text-xs font-medium text-accent-deep">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-accent" /> Live
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {log?.active && (
+            <span className="flex items-center gap-2 text-xs font-medium text-accent-deep">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-accent" /> Live
+            </span>
+          )}
+          {actions}
+        </div>
       </div>
       <p className="mb-4 mt-1 text-sm text-ink-soft">
-        Today&rsquo;s emails, grouped by the address they are sent from. It updates by itself and is still here after a refresh.
+        {description}
         {log && log.accounts.length > 0 && ` ${totals.sent} sent, ${totals.waiting} waiting${totals.failed ? `, ${totals.failed} failed` : ""}.`}
       </p>
 
@@ -186,6 +220,21 @@ export default function SendLog() {
                   {account.counts.sending + account.counts.queued > 0 ? ` · ${account.counts.sending + account.counts.queued} waiting` : ""}
                   {account.counts.failed > 0 ? ` · ${account.counts.failed} failed` : ""}
                 </p>
+                {account.counts.queued > 0 && (
+                  <button
+                    type="button"
+                    disabled={cancellingId !== null}
+                    onClick={() => askToConfirm({
+                      title: `Cancel emails from ${account.email}?`,
+                      description: `This cancels ${account.counts.queued} waiting email${account.counts.queued === 1 ? "" : "s"} for this account today. Emails already sent or currently sending are not affected.`,
+                      confirmLabel: "Cancel waiting emails",
+                      action: () => cancelAccount(account),
+                    })}
+                    className="btn-ghost min-h-8 px-2 text-xs text-red-700 hover:bg-red-500/10"
+                  >
+                    {cancellingId === account.id ? "Cancelling…" : "Cancel this account"}
+                  </button>
+                )}
               </div>
               <ul className="space-y-1.5">{items.map(row)}</ul>
               {!showAll && (

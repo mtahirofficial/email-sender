@@ -28,7 +28,15 @@ async function gmailGet(accessToken: string, path: string, retried = false): Pro
     }
     throw new GmailApiError(res.status, `Gmail ${res.status}: ${text.slice(0, 300)}`);
   }
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    if (!retried) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      return gmailGet(accessToken, path, true);
+    }
+    throw new GmailApiError(502, "Gmail returned an empty or invalid response.");
+  }
 }
 
 // ---- text helpers ----------------------------------------------------------
@@ -61,14 +69,28 @@ function fromBase64Url(data: string) {
 function htmlToText(html: string) {
   return html
     .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
-    .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, "\n")
+    .replace(/<img\b[^>]*\balt\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>/gi, (_m, doubleAlt: string, singleAlt: string) => `[image: ${doubleAlt ?? singleAlt}]`)
+    .replace(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi, (_m, doubleHref: string, singleHref: string, bareHref: string, label: string) => {
+      const href = doubleHref ?? singleHref ?? bareHref;
+      const text = label.replace(/<[^>]+>/g, "").trim();
+      return href && text ? `${text} <${href}>` : text;
+    })
+    .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, "*$2*")
+    .replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, "_$2_")
+    .replace(/<br\s*\/?>|<\/(?:p|div|li|h[1-6])\s*>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "\n• ")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(x[\da-f]+|\d+);/gi, (_m, code: string) => {
+      const point = code[0].toLowerCase() === "x" ? parseInt(code.slice(1), 16) : parseInt(code, 10);
+      try { return String.fromCodePoint(point); } catch { return ""; }
+    })
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
@@ -211,7 +233,7 @@ export function analyzeThread(messages: ThreadMessage[], accountEmail: string): 
 
 // ---- the whole inbox, one page at a time -------------------------------------
 
-export type MailListItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; isReply: boolean };
+export type MailListItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean };
 
 export const INBOX_PAGE_SIZE = 50;
 
@@ -248,6 +270,7 @@ export async function listInboxPage(accessToken: string, opts: { pageToken?: str
             snippet: decodeEntities(raw.snippet ?? ""),
             at: Number(raw.internalDate ?? 0),
             unread: (raw.labelIds ?? []).includes("UNREAD"),
+            starred: (raw.labelIds ?? []).includes("STARRED"),
             isReply: Boolean(h("In-Reply-To")) || /^\s*re:/i.test(subject),
           };
         } catch (err) {
@@ -258,4 +281,34 @@ export async function listInboxPage(accessToken: string, opts: { pageToken?: str
     })
   );
   return { items: found.filter((m): m is MailListItem => m !== null), nextPageToken: list.nextPageToken ?? null };
+}
+
+/** Gmail's modify scope is required to update labels on a thread or message. */
+async function gmailModify(accessToken: string, path: string, body: { addLabelIds?: string[]; removeLabelIds?: string[] }, retried = false) {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (res.status === 429 && !retried) {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    return gmailModify(accessToken, path, body, true);
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {
+      throw new GoogleReadScopeError("This account did not allow Outbox to manage inbox messages.");
+    }
+    throw new GmailApiError(res.status, `Gmail ${res.status}: ${text.slice(0, 300)}`);
+  }
+}
+
+export function markThreadRead(accessToken: string, threadId: string) {
+  return gmailModify(accessToken, `/threads/${encodeURIComponent(threadId)}/modify`, { removeLabelIds: ["UNREAD"] });
+}
+
+export function setMessageStarred(accessToken: string, messageId: string, starred: boolean) {
+  return gmailModify(accessToken, `/messages/${encodeURIComponent(messageId)}/modify`, starred ? { addLabelIds: ["STARRED"] } : { removeLabelIds: ["STARRED"] });
 }

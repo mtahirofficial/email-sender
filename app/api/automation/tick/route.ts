@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { runTickForUser } from "@/lib/scheduler";
+import { runTickForUserAll } from "@/lib/scheduler";
 import { automationErrorResponse } from "@/lib/automation";
 
 export const maxDuration = 60;
@@ -14,7 +14,7 @@ export async function POST() {
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   try {
-    return NextResponse.json({ ok: true, ...(await runTickForUser(createAdminClient(), user.id)) });
+    return NextResponse.json({ ok: true, ...(await runTickForUserAll(createAdminClient(), user.id)) });
   } catch (err) {
     return automationErrorResponse(err);
   }

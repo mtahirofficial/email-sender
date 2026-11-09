@@ -15,11 +15,13 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
   const count = Number(body?.count);
 
-  if (prompt.length < 10 || prompt.length > 1500) {
-    return NextResponse.json({ error: "Describe the email in 10 to 1500 characters." }, { status: 400 });
+  if (prompt.length < 10) {
+    return NextResponse.json({ error: "Describe the email in at least 10 characters." }, { status: 400 });
   }
+  if (notes.length > 2000) return NextResponse.json({ error: "AI notes must be 2,000 characters or fewer." }, { status: 400 });
   if (!Number.isInteger(count) || count < 1 || count > MAX_DRAFTS_PER_REQUEST) {
     return NextResponse.json({ error: "Invalid number of emails." }, { status: 400 });
   }
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const items = await generateEmails(prompt, contexts, { groqKey: access.ownKey });
+    const items = await generateEmails(prompt, contexts, { groqKey: access.ownKey, notes });
     await addAiUsage(user.id, count, access.used);
     return NextResponse.json({
       ok: true,

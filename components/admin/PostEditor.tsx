@@ -137,7 +137,7 @@ export default function PostEditor({ post }: { post?: BlogPost }) {
               }}
             />
           </label>
-          {cover && <button type="button" onClick={() => setCover("")} className="btn-ghost">Remove</button>}
+          {cover && <button type="button" onClick={() => window.confirm("Remove the cover image from this post?") && setCover("")} className="btn-ghost">Remove</button>}
         </div>
         {cover && <p className="break-all text-xs text-ink-soft">{cover}</p>}
         <div>

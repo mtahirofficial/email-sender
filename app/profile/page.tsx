@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { toHeaderUser } from "@/lib/header-user";
-import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import ProfileForm from "@/components/ProfileForm";
 
@@ -19,7 +18,6 @@ export default async function ProfilePage() {
 
   return (
     <>
-      <SiteHeader initialUser={headerUser} />
       <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="mb-6 font-serif text-3xl text-ink">Profile</h1>
         <ProfileForm user={headerUser} />

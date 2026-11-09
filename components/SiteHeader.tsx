@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { hasSessionCookieString } from "@/lib/supabase/session-cookie";
 import type { HeaderUser } from "@/lib/header-user";
+import ThemeToggle from "@/components/ThemeToggle";
 import {
   FlaskIcon,
   InboxIcon,
@@ -17,6 +18,11 @@ import {
   SparkleIcon,
   SettingsIcon,
   UserIcon,
+  DashboardIcon,
+  MenuIcon,
+  ClockIcon,
+  UsersIcon,
+  BookOpenIcon,
 } from "@/components/icons";
 
 const PUBLIC_LINKS = [
@@ -28,9 +34,14 @@ const PUBLIC_LINKS = [
 ];
 
 const MEMBER_LINKS = [
-  { href: "/compose", label: "Compose", Icon: SendIcon },
+  { href: "/dashboard", label: "Dashboard", Icon: DashboardIcon },
+  { href: "/compose", label: "Compose email", Icon: SendIcon },
   { href: "/automation", label: "Automation", Icon: SheetIcon },
   { href: "/inbox", label: "Inbox", Icon: InboxIcon },
+  { href: "/sent", label: "Sent history", Icon: ClockIcon },
+  { href: "/settings#accounts", label: "Connected accounts", Icon: UsersIcon },
+  { href: "/blog", label: "Blog", Icon: BookOpenIcon },
+  { href: "/settings", label: "Settings", Icon: SettingsIcon },
 ];
 
 const ADMIN_LINKS = [
@@ -138,16 +149,28 @@ function AccountMenu({ user, onSignedOut }: { user: HeaderUser; onSignedOut: () 
   );
 }
 
-/**
- * One header for the whole site. Public links are always shown; Compose and
- * Automation appear (as icons next to the avatar) once signed in; admin tools live in the account menu and are
- * only rendered for the admin. Pages that already know the user pass
- * `initialUser`; static pages leave it out and the header looks the user up
- * after load, so those pages can stay fully static.
- */
+/** Shared persistent shell for the public site and signed-in workspace routes. */
 export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser | null }) {
   const pathname = usePathname();
   const [fetched, setFetched] = useState<HeaderUser | null | undefined>(undefined);
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [hash, setHash] = useState("");
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem("outbox:sidebar-collapsed") === "1");
+    const updateHash = () => setHash(window.location.hash);
+    updateHash();
+    window.addEventListener("hashchange", updateHash);
+    return () => window.removeEventListener("hashchange", updateHash);
+  }, []);
+
+  function toggleSidebar() {
+    setCollapsed((value) => {
+      try { window.localStorage.setItem("outbox:sidebar-collapsed", value ? "0" : "1"); } catch { /* appearance preference is optional */ }
+      return !value;
+    });
+  }
 
   useEffect(() => {
     if (initialUser !== undefined) return;
@@ -167,12 +190,76 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
 
   const user = initialUser !== undefined ? initialUser : fetched; // undefined = still deciding
 
+  const isWorkspacePath = MEMBER_LINKS.some((item) => item.href.split("#")[0] !== "/blog" && pathname === item.href.split("#")[0])
+    || pathname === "/profile"
+    || pathname.startsWith("/admin")
+    || pathname === "/email-test"
+    || pathname === "/verify";
+
+  if (user || isWorkspacePath) {
+    const pageTitle = MEMBER_LINKS.find((item) => item.href.split("#")[0] === pathname && (!item.href.includes("#") || hash === item.href.slice(item.href.indexOf("#"))))?.label
+      ?? MEMBER_LINKS.find((item) => item.href === pathname)?.label
+      ?? (pathname.startsWith("/admin") ? "Admin workspace" : "Outbox");
+    const linkClass = (href: string) => {
+      const [path, anchor] = href.split("#");
+      const active = (pathname === path || (path === "/blog" && pathname.startsWith("/blog/"))) && (!anchor || hash === `#${anchor}` || (pathname === "/settings" && hash === "" && anchor === "accounts"));
+      return `group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors ${active ? "bg-accent-soft font-semibold text-accent-deep" : "text-ink-soft hover:bg-mist hover:text-ink"}`;
+    };
+
+    return (
+      <>
+        {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-40 bg-ink/30 md:hidden" onClick={() => setMobileOpen(false)} />}
+        <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-r border-line bg-white px-3 py-5 transition-[width,transform] duration-200 ${collapsed ? "app-sidebar-collapsed" : ""} ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+          <Link href="/" className={`mb-8 flex h-10 shrink-0 items-center gap-3 px-2 ${collapsed ? "justify-center" : ""}`} aria-label="Outbox home">
+            <Logo className={`shrink-0 ${collapsed ? "h-6 w-8" : "h-9 w-20"}`} />
+            {!collapsed && <span className="font-brand text-lg font-semibold tracking-wide text-ink">Outbox</span>}
+          </Link>
+          {!collapsed && <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-soft/70">Workspace</p>}
+          <nav aria-label="Workspace" className="flex-none space-y-1">
+            {MEMBER_LINKS.map(({ href, label, Icon }) => (
+              <Link key={href} href={href} aria-current={linkClass(href).includes("bg-accent-soft") ? "page" : undefined} title={collapsed ? label : undefined} onClick={() => setMobileOpen(false)} className={`${linkClass(href)} ${collapsed ? "justify-center px-0" : ""}`}>
+                <Icon className="h-[18px] w-[18px] shrink-0" />
+                {!collapsed && <span>{label}</span>}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-auto border-t border-line pt-4">
+            <ThemeToggle collapsed={collapsed} />
+            {user ? (
+              <Link href="/profile" title={collapsed ? "Profile" : undefined} className={`${linkClass("/profile")} ${collapsed ? "justify-center px-0" : ""}`}>
+                <UserIcon className="h-[18px] w-[18px] shrink-0" />
+                {!collapsed && <span className="min-w-0 truncate">{user.name ?? user.email}</span>}
+              </Link>
+            ) : (
+              <div aria-hidden="true" className={`flex min-h-11 items-center gap-3 px-3 ${collapsed ? "justify-center px-0" : ""}`}>
+                <span className="h-7 w-7 shrink-0 animate-pulse rounded-full bg-line" />
+                {!collapsed && <span className="h-3 w-28 animate-pulse rounded bg-line" />}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <header className={`app-topbar fixed right-0 top-0 z-30 flex h-[68px] items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur transition-[left] duration-200 sm:px-6 ${collapsed ? "left-0 md:left-[76px]" : "left-0 md:left-[252px]"}`}>
+          <div className="flex min-w-0 items-center gap-3">
+            <button type="button" onClick={() => { if (window.innerWidth < 768) setMobileOpen(true); else toggleSidebar(); }} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-ink-soft hover:bg-mist" aria-label={collapsed ? "Expand sidebar or open navigation" : "Collapse sidebar or open navigation"}>
+              <MenuIcon className="h-5 w-5" />
+            </button>
+            <span className="truncate text-sm font-semibold text-ink">{pageTitle}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {user && <div className="hidden sm:block"><AccountMenu user={user} onSignedOut={() => setFetched(null)} /></div>}
+            {user && <div className="sm:hidden"><AccountMenu user={user} onSignedOut={() => setFetched(null)} /></div>}
+          </div>
+        </header>
+      </>
+    );
+  }
+
   const isActive = (href: string) =>
     href === "/blog" ? pathname.startsWith("/blog") : href.startsWith("/#") ? false : pathname === href;
 
   const linkClass = (active: boolean) =>
-    `inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-full px-3.5 text-sm transition-colors ${
-      active ? "bg-accent-soft font-medium text-accent-deep" : "text-ink-soft hover:bg-mist hover:text-ink"
+    `inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-full px-3.5 text-sm transition-colors ${active ? "bg-accent-soft font-medium text-accent-deep" : "text-ink-soft hover:bg-mist hover:text-ink"
     }`;
 
   const links = (
@@ -191,8 +278,8 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
         <div className="flex items-center justify-between gap-4 py-2">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2.5" aria-label="Outbox home">
-              <Logo className="h-8 w-8" />
-              <span className="font-serif text-xl text-ink">Outbox</span>
+              <Logo className="h-8 w-16" />
+              <span className="font-brand text-xl font-semibold tracking-wide text-ink">Outbox</span>
             </Link>
             <nav aria-label="Main" className="hidden items-center gap-0.5 md:flex">
               {links}
@@ -211,9 +298,8 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
                     aria-label={label}
                     title={label}
                     aria-current={isActive(href) ? "page" : undefined}
-                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${
-                      isActive(href) ? "bg-accent-soft text-accent-deep" : "text-ink-soft hover:bg-mist hover:text-ink"
-                    }`}
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${isActive(href) ? "bg-accent-soft text-accent-deep" : "text-ink-soft hover:bg-mist hover:text-ink"
+                      }`}
                   >
                     <Icon className="h-5 w-5" />
                   </Link>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AiStatusNote from "@/components/AiStatusNote";
-import { AlertIcon, CheckIcon, SparkleIcon, SpinnerIcon, XIcon } from "@/components/icons";
+import { AlertIcon, CheckIcon, MarkReadIcon, SparkleIcon, SpinnerIcon, StarIcon, XIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
 import { useScrollLock } from "@/components/useScrollLock";
 import FullInbox, { senderAddress, type MailItem } from "@/components/inbox/FullInbox";
@@ -29,7 +29,7 @@ type Item = {
 type Account = { id: string; email: string; provider: string; inbox_enabled: boolean; sheets_enabled: boolean };
 type Settings = { follow_up_after_days: number; max_follow_ups: number; instructions: string; last_sync_at: string | null };
 type Data = { settings: Settings; accounts: Account[]; items: Item[] };
-type Message = { from: string; fromMe: boolean; at: number; text: string };
+type Message = { id: string; from: string; fromMe: boolean; at: number; text: string; unread: boolean; starred: boolean };
 type Draft = { body: string; summary?: string; intent?: string; needsReply?: boolean };
 type Tab = "replies" | "followup" | "waiting" | "done" | "all";
 
@@ -75,6 +75,58 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 const post = <T,>(url: string, body: unknown) => call<T>(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+function formattedEmailText(source: string) {
+  const tokens = /\[image:\s*([^\]]+)\]\s*<(https?:\/\/[^>\s]+)>|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|<(https?:\/\/[^>\s]+)>|(https?:\/\/[^\s<>]+)|\b([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})\b|\*([^*\n]+)\*|_([^_\n]+)_/gi;
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = tokens.exec(source))) {
+    if (match.index > cursor) parts.push(source.slice(cursor, match.index));
+    const imageLink = match[1] !== undefined;
+    const markdownLink = match[3] !== undefined;
+    const angleLink = match[5] !== undefined;
+    const plainLink = match[6] !== undefined;
+    const email = match[7] !== undefined;
+    const bold = match[8] !== undefined;
+    const italic = match[9] !== undefined;
+
+    if (imageLink || markdownLink || angleLink || plainLink || email) {
+      const rawUrl = (imageLink ? match[2] : markdownLink ? match[4] : angleLink ? match[5] : plainLink ? match[6] : `mailto:${match[7]}`) ?? "";
+      const label = (imageLink ? (match[1] ?? "").trim() : markdownLink ? match[3] : email ? match[7] : plainLink ? match[6] : match[5]) ?? "";
+      let url = rawUrl;
+      let suffix = "";
+      if (plainLink) {
+        const trimmed = url.replace(/[.,!?;:]+$/, "");
+        suffix = url.slice(trimmed.length);
+        url = trimmed;
+      }
+      parts.push(<a key={key++} href={url} target={email ? undefined : "_blank"} rel={email ? undefined : "noopener noreferrer"} className="font-medium text-accent-deep underline underline-offset-2">{label}</a>);
+      if (suffix) parts.push(suffix);
+    } else if (bold) {
+      parts.push(<strong key={key++} className="font-semibold">{formattedEmailText(match[8])}</strong>);
+    } else if (italic) {
+      parts.push(<em key={key++}>{formattedEmailText(match[9])}</em>);
+    }
+    cursor = tokens.lastIndex;
+  }
+
+  if (cursor < source.length) parts.push(source.slice(cursor));
+  return parts;
+}
+
+function FormattedEmail({ text }: { text: string }) {
+  const paragraphs = text.replace(/\r\n?/g, "\n").trim().split(/\n\s*\n/).filter(Boolean);
+  return (
+    <div className="space-y-3 break-words leading-relaxed">
+      {paragraphs.map((paragraph, index) => (
+        <p key={index} className="whitespace-pre-wrap">{formattedEmailText(paragraph)}</p>
+      ))}
+    </div>
+  );
+}
 
 const enableHref = (a: Account) => `/oauth/google?inbox=1${a.sheets_enabled ? "&sheets=1" : ""}&next=${encodeURIComponent("/inbox")}`;
 
@@ -446,10 +498,11 @@ function Conversation({
   const toast = useToast();
   useScrollLock(); // the page behind the conversation does not scroll while it is open
   const [messages, setMessages] = useState<Message[] | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [text, setText] = useState(draft?.body ?? "");
   const [info, setInfo] = useState<{ summary?: string; intent?: string } | null>(item.ai_summary ? { summary: item.ai_summary, intent: item.ai_intent ?? undefined } : null);
-  const [busy, setBusy] = useState<"" | "draft" | "send" | "status">("");
+  const [busy, setBusy] = useState<"" | "draft" | "send" | "status" | "mail-action">("");
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptText, setPromptText] = useState("");
   // A message opened from the full inbox is not an Outbox conversation: it is found by account + Gmail thread.
@@ -474,13 +527,28 @@ function Conversation({
 
   useEffect(() => {
     let cancelled = false;
-    call<{ messages: Message[] }>(`/api/inbox/thread?${new URLSearchParams(target)}`)
-      .then((d) => !cancelled && setMessages(d.messages))
+    call<{ messages: Message[]; threadId: string }>(`/api/inbox/thread?${new URLSearchParams(target)}`)
+      .then((d) => { if (!cancelled) { setMessages(d.messages); setThreadId(d.threadId); } })
       .catch((err) => !cancelled && setProblem(err instanceof Error ? err.message : "Could not open this conversation."));
     return () => {
       cancelled = true;
     };
   }, [item.id]);
+
+  async function updateMail(action: "mark-read" | "star" | "unstar", messageId?: string) {
+    if (!threadId) return;
+    setBusy("mail-action");
+    try {
+      await post("/api/inbox/mail/action", { account: item.account_id, threadId, ...(messageId ? { messageId } : {}), action });
+      if (action === "mark-read") setMessages((current) => current?.map((m) => ({ ...m, unread: false })) ?? null);
+      else if (messageId) setMessages((current) => current?.map((m) => m.id === messageId ? { ...m, starred: action === "star" } : m) ?? null);
+      await onChanged(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update this message.");
+    } finally {
+      setBusy("");
+    }
+  }
 
   // instruction empty: the AI reads the reply and suggests an answer. Otherwise it writes what the person's own prompt asks for.
   async function writeDraft(instruction = "") {
@@ -539,6 +607,7 @@ function Conversation({
             <p className="break-all font-semibold text-ink">{item.to_email}</p>
             <p className="truncate text-sm text-ink-soft">{item.subject}</p>
           </div>
+          {messages?.some((m) => m.unread) && <button type="button" onClick={() => void updateMail("mark-read")} disabled={busy !== ""} title="Mark thread as read" className="btn-ghost min-h-[40px] px-3 text-sm"><MarkReadIcon className="h-4 w-4" /> Mark read</button>}
           <button type="button" onClick={onClose} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-mist">
             <XIcon className="h-5 w-5" />
           </button>
@@ -557,10 +626,11 @@ function Conversation({
           )}
           {messages?.map((m, i) => (
             <div key={i} className={`rounded-xl px-3.5 py-2.5 text-sm ${m.fromMe ? "ml-8 bg-accent-soft text-accent-deep" : "mr-8 bg-mist text-ink"}`}>
-              <p className="mb-1 text-xs opacity-70">
-                {m.fromMe ? "You" : m.from} · {new Date(m.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
-              </p>
-              <p className="whitespace-pre-wrap break-words">{m.text}</p>
+              <div className="mb-1 flex items-center gap-2 text-xs opacity-70">
+                <p className="min-w-0 flex-1 truncate">{m.fromMe ? "You" : m.from} · {new Date(m.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+                <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} title={m.starred ? "Remove star" : "Star message"} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} className={`rounded p-1 ${m.starred ? "text-amber-500" : "hover:text-amber-500"}`}><StarIcon className="h-4 w-4" /></button>
+              </div>
+              <FormattedEmail text={m.text} />
             </div>
           ))}
           {info && (info.summary || info.intent) && (

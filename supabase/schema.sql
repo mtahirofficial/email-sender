@@ -205,9 +205,10 @@ alter table public.user_ai_keys enable row level security;
 -- Which connected Google accounts also granted Google Sheets access.
 alter table public.connected_accounts add column if not exists sheets_enabled boolean not null default false;
 
--- One linked sheet per user.
+-- One independent configuration per linked spreadsheet.
 create table if not exists public.outreach_settings (
-  user_id uuid primary key references auth.users (id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
   account_id uuid references public.connected_accounts (id) on delete set null,
   spreadsheet_id text not null,
   sheet_title text not null,
@@ -216,9 +217,13 @@ create table if not exists public.outreach_settings (
   sent_col text not null default 'D',
   daily_limit integer not null default 20 check (daily_limit between 1 and 200),
   prompt text not null default '',
+  ai_notes text not null default '',
   timezone text not null default 'UTC',
   updated_at timestamptz not null default now()
 );
+
+create unique index if not exists outreach_settings_user_sheet_idx
+  on public.outreach_settings (user_id, spreadsheet_id);
 
 -- Every address emailed through the automation. Prevents duplicate sends even
 -- if writing the tick back to the sheet fails, and powers the daily count.
@@ -264,11 +269,12 @@ alter table public.connected_accounts add column if not exists needs_reconnect b
 -- The reviewed-but-unsent batch (AI-written subjects and messages), one per user,
 -- so a connection problem never forces the AI to write everything again.
 create table if not exists public.outreach_drafts (
-  user_id uuid primary key references auth.users (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
   spreadsheet_id text not null,
   items jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (user_id, spreadsheet_id)
 );
 
 alter table public.outreach_drafts enable row level security;
@@ -317,13 +323,14 @@ alter table public.outreach_settings
 alter table public.outreach_sends
   add column if not exists account_id uuid references public.connected_accounts (id) on delete set null;
 
--- One row per connected account: how many emails it may send per day.
+-- Per automation and connected account: how many emails that sheet may send per day.
 create table if not exists public.outreach_senders (
   user_id uuid not null references auth.users (id) on delete cascade,
+  automation_id uuid not null references public.outreach_settings (id) on delete cascade,
   account_id uuid not null references public.connected_accounts (id) on delete cascade,
   daily_limit integer not null default 20 check (daily_limit between 0 and 500),
   enabled boolean not null default true,
-  primary key (user_id, account_id)
+  primary key (automation_id, account_id)
 );
 
 -- Emails written for a scheduled run, each with the time it may be sent.
@@ -433,3 +440,4 @@ alter table public.conversations add column if not exists reply_unseen boolean n
 
 -- Optional extra sheet columns for the automation (their values are given to the AI).
 alter table public.outreach_settings add column if not exists extra_cols jsonb not null default '[]'::jsonb;
+alter table public.outreach_settings add column if not exists ai_notes text not null default '';

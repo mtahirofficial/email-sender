@@ -22,15 +22,15 @@ export default function OpengraphImage() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          background: "#FAFAF7",
+          background: "#F7F8FC",
           color: "#16233A",
         }}
       >
         <div style={{ display: "flex", height: 28 }}>
-          <div style={{ flex: 3, background: "#2E5D50" }} />
-          <div style={{ flex: 1, background: "#C9922E" }} />
-          <div style={{ flex: 3, background: "#2E5D50" }} />
-          <div style={{ flex: 1, background: "#C9922E" }} />
+          <div style={{ flex: 3, background: "#6D5CE8" }} />
+          <div style={{ flex: 1, background: "#B8AEFF" }} />
+          <div style={{ flex: 3, background: "#6D5CE8" }} />
+          <div style={{ flex: 1, background: "#B8AEFF" }} />
         </div>
         <div
           style={{
@@ -41,7 +41,7 @@ export default function OpengraphImage() {
             padding: "0 88px",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", fontSize: 44, color: "#2E5D50", fontWeight: 700 }}>
+          <div style={{ display: "flex", alignItems: "center", fontSize: 44, color: "#6D5CE8", fontWeight: 700 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={logo} width={72} height={72} alt="" style={{ marginRight: 20 }} />
             Outbox

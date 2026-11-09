@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertIcon, SpinnerIcon } from "@/components/icons";
+import { AlertIcon, MarkReadIcon, SpinnerIcon, StarIcon } from "@/components/icons";
 
-export type MailItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; isReply: boolean };
+export type MailItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean };
 
 /** "Ann Lee <ann@x.com>" -> "Ann Lee" (or the address when there is no name) */
 export const senderName = (from: string) => from.replace(/<[^>]*>/, "").replace(/^["'\s]+|["'\s]+$/g, "") || from;
@@ -27,6 +27,8 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsPermission, setNeedsPermission] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [query, setQuery] = useState("");
 
@@ -39,12 +41,14 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
         if (q) params.set("q", q);
         const res = await fetch(`/api/inbox/mail?${params}`, { cache: "no-store" });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not load the inbox.");
+        if (!res.ok) throw Object.assign(new Error(typeof data.error === "string" ? data.error : "Could not load the inbox."), { needsPermission: Boolean(data.needsPermission) });
         setItems(data.items as MailItem[]);
         setNext((data.nextPageToken as string | null) ?? null);
         setError(null);
+        setNeedsPermission(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not load the inbox.");
+        setNeedsPermission(Boolean((err as { needsPermission?: boolean }).needsPermission));
       } finally {
         setLoading(false);
       }
@@ -70,6 +74,28 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
     if (page === 0) return;
     setPage(page - 1);
     void load(tokens[page - 1], query);
+  }
+
+  async function updateMessage(mail: MailItem, action: "mark-read" | "star" | "unstar") {
+    const key = `${mail.id}:${action}`;
+    setActionBusy(key);
+    try {
+      const res = await fetch("/api/inbox/mail/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account: accountId, threadId: mail.threadId, messageId: mail.id, action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.needsPermission) setNeedsPermission(true);
+        throw new Error(typeof data.error === "string" ? data.error : "Could not update this message.");
+      }
+      await load(tokens[page] ?? "", query);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update this message.");
+    } finally {
+      setActionBusy(null);
+    }
   }
 
   const first = page * 50 + 1;
@@ -128,6 +154,7 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
           <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" /> {error}
         </p>
       )}
+      {needsPermission && <a className="mt-2 inline-flex text-sm font-medium text-accent underline" href="/oauth/google?inbox=1&next=%2Finbox">Reconnect Gmail to manage messages</a>}
 
       {!items && !error && (
         <p className="mt-4 flex items-center gap-2 text-sm text-ink-soft">
@@ -139,8 +166,8 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
         <ul className={`mt-3 max-h-[60vh] divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${loading ? "opacity-60" : ""}`}>
           {items.length === 0 && <li className="px-2 py-8 text-center text-sm text-ink-soft">{query ? "Nothing matches that search." : "The inbox is empty."}</li>}
           {items.map((m) => (
-            <li key={m.id}>
-              <button type="button" onClick={() => onOpen(m)} className="block w-full rounded-lg px-2 py-2.5 text-left hover:bg-mist">
+            <li key={m.id} className="flex items-center gap-1 rounded-lg hover:bg-mist">
+              <button type="button" onClick={() => onOpen(m)} className="block min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left">
                 <div className="flex items-center gap-x-3">
                   <span className={`min-w-0 flex-1 truncate text-sm ${m.unread ? "font-semibold text-ink" : "text-ink"}`}>{senderName(m.from)}</span>
                   {m.isReply && <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-deep">Reply</span>}
@@ -149,6 +176,10 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
                 <p className={`truncate text-sm ${m.unread ? "font-medium text-ink" : "text-ink-soft"}`}>{m.subject || "(no subject)"}</p>
                 <p className="truncate text-xs text-ink-soft">{m.snippet}</p>
               </button>
+              <div className="flex shrink-0 items-center">
+                {m.unread && <button type="button" disabled={actionBusy === `${m.id}:mark-read`} onClick={() => void updateMessage(m, "mark-read")} title="Mark thread as read" aria-label={`Mark thread from ${senderName(m.from)} as read`} className="rounded-md p-2 text-ink-soft hover:bg-white hover:text-ink disabled:opacity-50"><MarkReadIcon className="h-4 w-4" /></button>}
+                <button type="button" disabled={actionBusy === `${m.id}:${m.starred ? "unstar" : "star"}`} onClick={() => void updateMessage(m, m.starred ? "unstar" : "star")} title={m.starred ? "Remove star" : "Star message"} aria-label={`${m.starred ? "Remove star from" : "Star"} message from ${senderName(m.from)}`} className={`rounded-md p-2 hover:bg-white disabled:opacity-50 ${m.starred ? "text-amber-500" : "text-ink-soft hover:text-amber-500"}`}><StarIcon className="h-4 w-4" /></button>
+              </div>
             </li>
           ))}
         </ul>
@@ -156,7 +187,7 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
 
       {items && items.length > 0 && <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         {pager}
-        <p className="text-xs text-ink-soft">Opening a message here does not mark it as read in Gmail.</p>
+        <p className="text-xs text-ink-soft">Use the envelope to mark a thread read, or the star to save a message.</p>
       </div>}
     </div>
   );

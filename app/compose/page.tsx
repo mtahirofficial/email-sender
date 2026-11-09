@@ -2,14 +2,12 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { toHeaderUser } from "@/lib/header-user";
 import { listConnectedAccounts, refreshAccountHealth } from "@/lib/accounts";
 import { isAiConfigured } from "@/lib/ai";
 import { getUserKeyHint } from "@/lib/ai-keys";
 import { getAiPresets } from "@/lib/ai-presets";
 import EmailForm from "@/components/EmailForm";
 import AlertBanner from "@/components/AlertBanner";
-import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import Link from "next/link";
 import { InboxIcon, SheetIcon } from "@/components/icons";
@@ -29,7 +27,6 @@ export default async function ComposePage() {
 
   return (
     <>
-      <SiteHeader initialUser={toHeaderUser(user)} />
 
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
         <h1 className="sr-only">Compose email</h1>

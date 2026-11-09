@@ -44,7 +44,9 @@ export async function POST(request: NextRequest) {
     const useFilter = Boolean(filterColRaw && filterValue);
 
     const prompt = str(body?.prompt);
-    if (prompt.length < 10 || prompt.length > 1500) throw new AutomationError("Describe what the emails should say in 10 to 1500 characters.");
+    if (prompt.length < 10) throw new AutomationError("Describe what the emails should say in at least 10 characters.");
+    const aiNotes = str(body?.aiNotes);
+    if (aiNotes.length > 2000) throw new AutomationError("AI notes must be 2,000 characters or fewer.");
 
     const timezone = str(body?.timezone) || "UTC";
     const accountId = str(body?.accountId);
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
       filter_value: useFilter ? filterValue : null,
       extra_cols: extraCols,
       prompt,
+      ai_notes: aiNotes,
       timezone,
     } as OutreachSettings;
 
@@ -73,17 +76,18 @@ export async function POST(request: NextRequest) {
       throw new AutomationError(`No email addresses found in column ${emailCol} of "${sheetTitle}"${useFilter ? ` (rows where column ${filterColRaw.toUpperCase()} is "${filterValue}")` : ""}. Check the column letters.`);
     }
 
-    let { error } = await supabase.from("outreach_settings").upsert({ ...settings, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    let { data: saved, error } = await supabase.from("outreach_settings").upsert({ ...settings, updated_at: new Date().toISOString() }, { onConflict: "user_id,spreadsheet_id" }).select("*").single();
     if (error && /extra_cols/i.test(error.message ?? "")) {
       // the column does not exist yet (migration not run): everything else still saves
       if (extraCols.length > 0) throw new AutomationError("To use extra columns, run supabase/migrations_add_extra_columns.sql in the Supabase SQL Editor first.");
       const { extra_cols: _unused, ...rest } = settings as OutreachSettings & { extra_cols?: unknown };
       void _unused;
-      ({ error } = await supabase.from("outreach_settings").upsert({ ...rest, updated_at: new Date().toISOString() }, { onConflict: "user_id" }));
+      ({ data: saved, error } = await supabase.from("outreach_settings").upsert({ ...rest, updated_at: new Date().toISOString() }, { onConflict: "user_id,spreadsheet_id" }).select("*").single());
     }
+    if (error && /ai_notes/i.test(error.message ?? "")) throw new AutomationError("To use automation AI notes, run supabase/migrations_add_automation_ai_notes.sql in the Supabase SQL Editor first.");
     if (error) throw error;
 
-    return NextResponse.json({ ok: true, sheetTitle, stats });
+    return NextResponse.json({ ok: true, settings: saved, sheetTitle, stats });
   } catch (err) {
     return automationErrorResponse(err);
   }

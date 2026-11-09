@@ -62,9 +62,9 @@ function Editor({ preset }: { preset?: PresetRow }) {
 
       <div>
         <label htmlFor={`prompt-${idp}`} className="label">
-          Prompt <span className="font-normal text-ink-soft">({prompt.length}/1500)</span>
+          Prompt
         </label>
-        <textarea id={`prompt-${idp}`} rows={5} maxLength={1500} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="input resize-y" />
+        <textarea id={`prompt-${idp}`} rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="input resize-y" />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -74,7 +74,7 @@ function Editor({ preset }: { preset?: PresetRow }) {
               {busy && <SpinnerIcon />} Save
             </button>
             <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-ink-soft">
-              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-[#2E5D50]" />
+              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-accent" />
               Show to users
             </label>
             <button

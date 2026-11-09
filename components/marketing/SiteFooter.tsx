@@ -8,8 +8,8 @@ export default function SiteFooter() {
       <div className="flex w-full flex-col gap-8 px-4 py-10 sm:px-6 md:flex-row md:items-start md:justify-between">
         <div className="max-w-sm">
           <div className="flex items-center gap-2.5">
-            <Logo className="h-7 w-7" />
-            <span className="font-serif text-lg text-ink">{SITE_NAME}</span>
+            <Logo className="h-7 w-14" />
+            <span className="font-brand text-lg font-semibold tracking-wide text-ink">{SITE_NAME}</span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">
             Send individual emails from your own Gmail or Outlook address, with send-only access.

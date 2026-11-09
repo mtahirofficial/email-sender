@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertIcon, SpinnerIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
+import { useConfirmAction } from "@/components/ConfirmAction";
 
 type Status = "valid" | "invalid" | "risky" | "unknown";
 type Result = { email: string; status: Status; detail: string };
@@ -39,6 +40,7 @@ function download(name: string, text: string, type: string) {
 
 export default function EmailVerifier() {
   const toast = useToast();
+  const { askToConfirm, confirmationDialog } = useConfirmAction();
   const [input, setInput] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
@@ -144,6 +146,7 @@ export default function EmailVerifier() {
 
   return (
     <div className="space-y-4">
+      {confirmationDialog}
       <div className="card p-5 sm:p-6">
         <label htmlFor="verify-input" className="label">
           Email addresses
@@ -165,7 +168,7 @@ export default function EmailVerifier() {
               Stop
             </button>
           )}
-          <button type="button" onClick={clearAll} disabled={running} className="btn-ghost">
+          <button type="button" onClick={() => askToConfirm({ title: "Clear email checks?", description: "This removes the entered addresses and all verification results from this page.", confirmLabel: "Clear all", action: clearAll })} disabled={running || (input.length === 0 && results.length === 0)} className="btn-ghost">
             Clear
           </button>
           <span className="text-sm text-ink-soft">{count > 0 ? `${count} address${count === 1 ? "" : "es"}` : ""}</span>

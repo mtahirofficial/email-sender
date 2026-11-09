@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { HeaderUser } from "@/lib/header-user";
 import { AlertIcon, CheckIcon, SpinnerIcon } from "@/components/icons";
+import { useConfirmAction } from "@/components/ConfirmAction";
 
 type Notice = { ok: boolean; text: string } | null;
 
@@ -33,6 +34,7 @@ function Section({ title, description, children, danger = false }: { title: stri
 export default function SettingsForm({ user }: { user: HeaderUser }) {
   const router = useRouter();
   const supabase = createClient();
+  const { askToConfirm, confirmationDialog } = useConfirmAction();
 
   // profile
   const [name, setName] = useState(user.name ?? "");
@@ -133,6 +135,7 @@ export default function SettingsForm({ user }: { user: HeaderUser }) {
 
   return (
     <div className="space-y-6">
+      {confirmationDialog}
       <Section title="Profile" description="Your name and photo appear in the account menu.">
         <div className="mb-6 flex items-center gap-4">
           {user.avatarUrl ? (
@@ -158,7 +161,7 @@ export default function SettingsForm({ user }: { user: HeaderUser }) {
                 />
               </label>
               {user.avatarUrl && (
-                <button type="button" onClick={removePhoto} disabled={photoBusy} className="btn-ghost min-h-[40px]">Remove</button>
+                <button type="button" onClick={() => askToConfirm({ title: "Remove profile photo?", description: "Your profile will show your initial instead. You can upload another photo any time.", confirmLabel: "Remove photo", action: removePhoto })} disabled={photoBusy} className="btn-ghost min-h-[40px]">Remove</button>
               )}
             </div>
             <p className="text-xs text-ink-soft">JPG, PNG or WebP, up to 2 MB.</p>

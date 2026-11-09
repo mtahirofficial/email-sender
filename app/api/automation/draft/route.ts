@@ -15,17 +15,18 @@ async function authed() {
   return { supabase, user };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const { supabase, user } = await authed();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   try {
-    const settings = await getSettings(supabase, user.id);
-    const { data, error } = await supabase.from("outreach_drafts").select("spreadsheet_id, items, updated_at").eq("user_id", user.id).maybeSingle();
+    const settings = await getSettings(supabase, user.id, request.nextUrl.searchParams.get("automationId"));
+    if (!settings) return NextResponse.json({ draft: null });
+    const { data, error } = await supabase.from("outreach_drafts").select("spreadsheet_id, items, updated_at").eq("user_id", user.id).eq("spreadsheet_id", settings.spreadsheet_id).maybeSingle();
     if (error) throw error;
 
     // A draft for a different sheet than the one linked now is no longer relevant.
-    if (!data || !settings || data.spreadsheet_id !== settings.spreadsheet_id || !Array.isArray(data.items) || data.items.length === 0) {
+    if (!data || data.spreadsheet_id !== settings.spreadsheet_id || !Array.isArray(data.items) || data.items.length === 0) {
       return NextResponse.json({ draft: null });
     }
     return NextResponse.json({ draft: { items: data.items, updatedAt: data.updated_at } });
@@ -39,10 +40,10 @@ export async function PUT(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   try {
-    const settings = await getSettings(supabase, user.id);
+    const body = await request.json().catch(() => null);
+    const settings = await getSettings(supabase, user.id, body?.automationId);
     if (!settings) throw new AutomationError("Import a sheet first.");
 
-    const body = await request.json().catch(() => null);
     const raw: unknown[] = Array.isArray(body?.items) ? body.items : [];
     if (raw.length > 200) throw new AutomationError("Too many emails in one draft.");
 
@@ -66,7 +67,7 @@ export async function PUT(request: NextRequest) {
 
     const { error } = await supabase
       .from("outreach_drafts")
-      .upsert({ user_id: user.id, spreadsheet_id: settings.spreadsheet_id, items, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      .upsert({ user_id: user.id, spreadsheet_id: settings.spreadsheet_id, items, updated_at: new Date().toISOString() }, { onConflict: "user_id,spreadsheet_id" });
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -74,10 +75,11 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   const { supabase, user } = await authed();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
-  const { error } = await supabase.from("outreach_drafts").delete().eq("user_id", user.id);
+  const settings = await getSettings(supabase, user.id, request.nextUrl.searchParams.get("automationId"));
+  const { error } = settings ? await supabase.from("outreach_drafts").delete().eq("user_id", user.id).eq("spreadsheet_id", settings.spreadsheet_id) : { error: null };
   if (error) console.error("draft delete failed", error);
   return NextResponse.json({ ok: true });
 }

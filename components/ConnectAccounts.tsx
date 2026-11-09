@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useScrollLock } from "@/components/useScrollLock";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
-import { MailIcon, PlusIcon, ShieldIcon, UsersIcon } from "@/components/icons";
+import { MailIcon, PlusIcon, ShieldIcon } from "@/components/icons";
 import { reconnectHref } from "@/lib/reconnect";
+import { useConfirmAction } from "@/components/ConfirmAction";
 
 export default function ConnectAccounts({
   accounts,
@@ -18,47 +19,63 @@ export default function ConnectAccounts({
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmGoogle, setConfirmGoogle] = useState(false);
+  const { askToConfirm, confirmationDialog } = useConfirmAction();
   useScrollLock(confirmGoogle);
 
   useEffect(() => {
     if (!confirmGoogle) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setConfirmGoogle(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setConfirmGoogle(false);
+      }
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [confirmGoogle]);
 
   async function disconnect(accountId: string) {
     setRemovingId(accountId);
-    await fetch("/api/accounts/disconnect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId }),
-    });
-    setRemovingId(null);
-    router.refresh();
+    try {
+      const response = await fetch("/api/accounts/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId }),
+      });
+      if (!response.ok) throw new Error("Could not disconnect this account. Please try again.");
+      router.refresh();
+    } finally {
+      setRemovingId(null);
+    }
   }
 
   return (
-    <section aria-labelledby="accounts-heading" className="card p-5">
-      <div className="flex items-center gap-2.5">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent-soft text-accent-deep">
-          <UsersIcon className="h-4 w-4" />
-        </span>
-        <h2 id="accounts-heading" className="font-serif text-lg text-ink">
-          Connected accounts
-        </h2>
+    <section aria-labelledby="accounts-heading" className="card p-5 sm:p-7">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 id="accounts-heading" className="font-serif text-2xl text-ink">Sending accounts</h2>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">{accounts.length} {accounts.length === 1 ? "account" : "accounts"} connected. Outbox has send-only access to each one.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setConfirmGoogle(true)} className="btn-secondary min-h-11"> <PlusIcon className="h-4 w-4" /> Connect Gmail</button>
+          {microsoftEnabled ? (
+            <a href="/oauth/microsoft" className="btn-secondary min-h-11"><PlusIcon className="h-4 w-4" /> Connect Outlook</a>
+          ) : (
+            <button type="button" disabled className="btn-secondary min-h-11"><PlusIcon className="h-4 w-4" /> Connect Outlook <span className="pill border-line bg-mist text-ink-soft">Coming soon</span></button>
+          )}
+        </div>
       </div>
-      <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-        Mail sends through the account you pick, never through Outbox itself.
-      </p>
 
       {accounts.length === 0 ? (
-        <div className="mt-4 rounded-xl border border-dashed border-line bg-paper px-4 py-6 text-center">
+        <div className="mt-5 rounded-xl border border-dashed border-line bg-paper px-4 py-8 text-center">
           <MailIcon className="mx-auto h-6 w-6 text-ink-soft" />
           <p className="mt-2 text-sm text-ink-soft">No accounts connected yet.</p>
         </div>
       ) : (
-        <ul className="mt-4 space-y-2.5">
+        <div className="mt-5 overflow-hidden rounded-2xl border border-line bg-surface">
+          <div className="hidden items-center justify-between border-b border-line px-5 py-3 text-xs font-semibold uppercase tracking-[.1em] text-ink-soft sm:flex">
+            <span>Account</span><span className="pr-[10.5rem]">Status</span>
+          </div>
+          <ul className="divide-y divide-line">
           {accounts.map((account) => {
             const isGoogle = account.provider === "google";
             const needs = Boolean(account.needs_reconnect);
@@ -66,78 +83,63 @@ export default function ConnectAccounts({
             return (
               <li
                 key={account.id}
-                className={`rounded-xl border px-3.5 py-3 ${needs ? "border-amber/40 bg-amber-soft/60" : "border-line bg-paper"}`}
+                className={`px-4 py-4 sm:px-5 ${needs ? "bg-amber-soft/30" : ""}`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-3 sm:flex-nowrap">
                   <span
                     aria-hidden="true"
                     className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-semibold ${
-                      isGoogle ? "bg-accent-soft text-accent-deep" : "bg-amber-soft text-amber"
+                      "bg-accent-soft text-accent-deep"
                     }`}
                   >
-                    {isGoogle ? "G" : "O"}
+                    {(account.email[0] ?? "?").toUpperCase()}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-ink" title={account.email}>
+                  <div className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] sm:basis-auto">
+                    <p className="truncate text-sm font-semibold text-ink" title={account.email}>
                       {account.email}
                     </p>
-                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-soft">
-                      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${needs ? "bg-amber" : "bg-accent"}`} />
-                      {isGoogle ? "Gmail" : "Outlook"} ·{" "}
-                      <span className={needs ? "font-medium text-amber" : ""}>{needs ? "Needs reconnect" : "Connected"}</span>
-                    </p>
+                    <p className="mt-0.5 text-sm text-ink-soft">{isGoogle ? "Gmail" : "Outlook"}</p>
                   </div>
-                </div>
+                  <div className={`inline-flex min-h-8 items-center gap-2 rounded-full px-3 text-sm font-medium ${needs ? "bg-amber-soft text-amber" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}>
+                    <span aria-hidden="true" className={`h-2 w-2 rounded-full ${needs ? "bg-amber" : "bg-emerald-500"}`} />
+                    {needs ? "Reconnect needed" : "Connected"}
+                  </div>
 
-                {needs && (
-                  <p className="mt-2.5 text-xs leading-relaxed text-amber">
-                    This connection has expired, was removed, or is missing the &ldquo;Send email&rdquo; permission.
-                    Reconnect to keep sending, and keep every box ticked on Google&rsquo;s screen.
-                  </p>
-                )}
-
-                <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2 border-t border-line/70 pt-2.5">
-                  {needs && canReconnect && (
-                    <a href={reconnectHref(account)} aria-label={`Reconnect ${account.email}`} className="btn-primary min-h-[40px] px-3.5 text-xs">
-                      Reconnect
-                    </a>
-                  )}
                   <button
                     type="button"
-                    onClick={() => disconnect(account.id)}
+                    onClick={() => askToConfirm({
+                      title: "Disconnect this account?",
+                      description: `Outbox will remove the saved connection for ${account.email}. Scheduled emails from this account will stop. Your Google or Microsoft account will not be changed, and you can reconnect it later.`,
+                      confirmLabel: "Disconnect account",
+                      action: () => disconnect(account.id),
+                    })}
                     disabled={removingId === account.id}
                     aria-label={`Disconnect ${account.email}`}
-                    className="btn-ghost min-h-[40px] px-3 text-xs"
+                    className="min-h-10 rounded-xl border border-red-500/25 px-3.5 text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10 disabled:opacity-50"
                   >
                     {removingId === account.id ? "Removing…" : "Disconnect"}
                   </button>
                 </div>
+
+                {needs && (
+                  <p className="mt-3 pl-12 text-xs leading-relaxed text-amber">
+                    This connection has expired, was removed, or is missing the &ldquo;Send email&rdquo; permission. Reconnect to keep sending.
+                  </p>
+                )}
+                {needs && canReconnect && <a href={reconnectHref(account)} className="ml-12 mt-2 inline-flex text-xs font-semibold text-accent-deep underline underline-offset-2">Reconnect {isGoogle ? "Gmail" : "Outlook"}</a>}
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </div>
       )}
-
-      <div className="mt-4 flex flex-col gap-2">
-        <button type="button" onClick={() => setConfirmGoogle(true)} className="btn-secondary">
-          <PlusIcon className="h-4 w-4" /> Connect Gmail
-        </button>
-        {microsoftEnabled ? (
-          <a href="/oauth/microsoft" className="btn-secondary">
-            <PlusIcon className="h-4 w-4" /> Connect Outlook
-          </a>
-        ) : (
-          <button type="button" disabled className="btn-secondary">
-            <PlusIcon className="h-4 w-4" /> Connect Outlook
-            <span className="pill border-line bg-mist text-ink-soft">Coming soon</span>
-          </button>
-        )}
-      </div>
 
       <p className="mt-4 flex gap-2 text-xs leading-relaxed text-ink-soft">
         <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
         Connecting only needs permission to send. Reading replies is separate and optional: you turn it on later in the Inbox.
       </p>
+
+      {confirmationDialog}
 
       {confirmGoogle && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && setConfirmGoogle(false)}>

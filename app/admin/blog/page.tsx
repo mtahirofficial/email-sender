@@ -4,9 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminUser } from "@/lib/admin";
 import { adminListPosts } from "@/lib/blog";
-import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/marketing/SiteFooter";
-import { toHeaderUser } from "@/lib/header-user";
 import LocalTime from "@/components/LocalTime";
 import SeedStarterPosts from "@/components/admin/SeedStarterPosts";
 import { PlusIcon } from "@/components/icons";
@@ -32,7 +30,6 @@ export default async function AdminBlogPage() {
 
   return (
     <>
-      <SiteHeader initialUser={toHeaderUser(user)} />
       <main id="main" className="mx-auto w-full flex-1 max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
