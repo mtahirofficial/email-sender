@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Overview", robots: { index: false, f
 const dayKey = (date: Date) => date.toLocaleDateString("en-CA", { timeZone: "UTC" });
 
 export default async function DashboardPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=%2Fdashboard");
 
