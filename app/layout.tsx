@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Dosis, Inter, Source_Serif_4 } from "next/font/google";
+import { Inter, Orbitron, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 import ToastProvider from "@/components/Toaster";
@@ -22,11 +22,11 @@ const sourceSerif = Source_Serif_4({
   weight: ["400", "600"],
 });
 
-const dosis = Dosis({
+const orbitron = Orbitron({
   subsets: ["latin"],
   variable: "--font-brand",
   display: "swap",
-  weight: "variable",
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -50,7 +50,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${sourceSerif.variable} ${dosis.variable}`}>
+    <html lang="en" className={`${inter.variable} ${sourceSerif.variable} ${orbitron.variable}`}>
       <body className="flex min-h-screen flex-col font-sans antialiased">
         <a
           href="#main"

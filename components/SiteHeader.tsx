@@ -25,6 +25,7 @@ import {
   BookOpenIcon,
 } from "@/components/icons";
 
+
 const PUBLIC_LINKS = [
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#features", label: "Features" },
@@ -210,9 +211,9 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
       <>
         {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-40 bg-ink/30 md:hidden" onClick={() => setMobileOpen(false)} />}
         <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-r border-line bg-white px-3 py-5 transition-[width,transform] duration-200 ${collapsed ? "app-sidebar-collapsed" : ""} ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-          <Link href="/" className={`mb-8 flex h-10 shrink-0 items-center gap-3 px-2 ${collapsed ? "justify-center" : ""}`} aria-label="Outbox home">
+          <Link href="/" className={`flex h-10 shrink-0 items-center gap-3 px-2 ${collapsed ? "mb-8 justify-center" : ""}`} aria-label="Outbox home">
             <Logo className={`shrink-0 ${collapsed ? "h-6 w-8" : "h-9 w-20"}`} />
-            {!collapsed && <span className="font-brand text-lg font-semibold tracking-wide text-ink">Outbox</span>}
+            {!collapsed && <span className="font-brand text-2xl font-semibold tracking-wide text-ink">Outbox</span>}
           </Link>
           {!collapsed && <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-soft/70">Workspace</p>}
           <nav aria-label="Workspace" className="flex-none space-y-1">
@@ -244,8 +245,11 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
             <button type="button" onClick={() => { if (window.innerWidth < 768) setMobileOpen(true); else toggleSidebar(); }} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-ink-soft hover:bg-mist" aria-label={collapsed ? "Expand sidebar or open navigation" : "Collapse sidebar or open navigation"}>
               <MenuIcon className="h-5 w-5" />
             </button>
-            <span className="truncate text-sm font-semibold text-ink">{pageTitle}</span>
+            <span className="max-w-[calc(50vw-5rem)] truncate text-sm font-semibold text-ink md:max-w-none">{pageTitle}</span>
           </div>
+          {!mobileOpen && <Link href="/dashboard" aria-label="Outbox home" className="absolute left-1/2 -translate-x-1/2 md:hidden">
+            <Logo className="h-7 w-10 shrink-0" />
+          </Link>}
           <div className="flex items-center gap-2">
             {user && <div className="hidden sm:block"><AccountMenu user={user} onSignedOut={() => setFetched(null)} /></div>}
             {user && <div className="sm:hidden"><AccountMenu user={user} onSignedOut={() => setFetched(null)} /></div>}
@@ -279,7 +283,7 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2.5" aria-label="Outbox home">
               <Logo className="h-8 w-16" />
-              <span className="font-brand text-xl font-semibold tracking-wide text-ink">Outbox</span>
+              <span className="font-brand text-2xl font-semibold tracking-wide text-ink">Outbox</span>
             </Link>
             <nav aria-label="Main" className="hidden items-center gap-0.5 md:flex">
               {links}

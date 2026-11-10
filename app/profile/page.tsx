@@ -8,7 +8,7 @@ import ProfileForm from "@/components/ProfileForm";
 export const metadata: Metadata = { title: "Profile", robots: { index: false, follow: false } };
 
 export default async function ProfilePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -19,7 +19,6 @@ export default async function ProfilePage() {
   return (
     <>
       <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <h1 className="mb-6 font-serif text-3xl text-ink">Profile</h1>
         <ProfileForm user={headerUser} />
       </main>
       <SiteFooter />

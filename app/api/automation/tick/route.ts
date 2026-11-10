@@ -7,7 +7,7 @@ export const maxDuration = 60;
 
 // Lets an open Automation page drive the schedule too (no cron needed while it stays open).
 export async function POST() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * it could not be decided (e.g. the auth service was unreachable), so a hiccup never logs anyone out.
  */
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error,

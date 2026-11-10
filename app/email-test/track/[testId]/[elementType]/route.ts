@@ -36,8 +36,9 @@ function getClientIp(request: NextRequest): string | null {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { testId: string; elementType: string } }
+  props: { params: Promise<{ testId: string; elementType: string }> }
 ) {
+  const params = await props.params;
   const { testId, elementType } = params;
   console.log(`email-test tracking hit: test=${testId} element=${elementType}`);
 

@@ -155,6 +155,15 @@ export default function AutomationPanel({
     router.refresh();
   }
 
+  function removed(id: string) {
+    const remaining = settingsList.filter((sheet) => sheet.id !== id);
+    setSettingsList(remaining);
+    setSenderOverrides((saved) => Object.fromEntries(Object.entries(saved).filter(([key]) => key !== id)));
+    setSettingsOpen(false);
+    setSelection(remaining[0] ? { kind: "sheet", id: remaining[0].id } : { kind: "new", returnId: "" });
+    router.refresh();
+  }
+
   function cancelAdding() {
     if (selection.kind === "new" && selection.returnId) {
       setSettingsOpen(false);
@@ -176,6 +185,7 @@ export default function AutomationPanel({
       settingsOpen={settingsOpen}
       onSettingsOpenChange={setSettingsOpen}
       onConfigured={configured}
+      onRemoved={removed}
       onSendersSaved={(nextSenders) => {
         if (current) setSenderOverrides((saved) => ({ ...saved, [current.id]: nextSenders }));
       }}
@@ -241,6 +251,7 @@ function AutomationPanelEditor({
   settingsOpen,
   onSettingsOpenChange,
   onConfigured,
+  onRemoved,
   onSendersSaved,
 }: {
   accounts: GoogleAccount[];
@@ -252,6 +263,7 @@ function AutomationPanelEditor({
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
   onConfigured: (settings: SettingsView, senders?: SenderView[]) => void;
+  onRemoved: (id: string) => void;
   onSendersSaved: (senders: SenderView[]) => void;
   /** Whether the server-side scheduler is calling the app, so runs continue with this page closed. */
   background: { active: boolean; isAdmin: boolean };
@@ -331,6 +343,7 @@ function AutomationPanelEditor({
   const [schedNote, setSchedNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [queue, setQueue] = useState<QueueInfo | null>(null);
   const [schedError, setSchedError] = useState<string | null>(null);
+  const [schedInfo, setSchedInfo] = useState<string | null>(null);
 
   // ---- manual batch ----
   const [phase, setPhase] = useState<Phase>("idle");
@@ -384,6 +397,7 @@ function AutomationPanelEditor({
       if (data.configured) {
         setQueue(data.queue);
         setSchedError(data.error ?? null);
+        setSchedInfo(data.note ?? null);
       }
     } catch {
       // keep what is shown
@@ -505,6 +519,20 @@ function AutomationPanelEditor({
     }
   }
 
+  function confirmRemoveSheet() {
+    if (!settings || !automationId || automationId.startsWith("legacy:")) return;
+    askToConfirm({
+      title: `Remove "${settings.sheet_title}"?`,
+      description: "This removes the sheet from automation and cancels its waiting emails. Sent history will be kept.",
+      confirmLabel: "Remove sheet",
+      action: async () => {
+        await api(`/api/automation/settings?automationId=${encodeURIComponent(automationId)}`, "DELETE");
+        toast.success("Sheet removed from automation.");
+        onRemoved(automationId);
+      },
+    });
+  }
+
   async function saveSenders() {
     setSendersBusy(true);
     setSendersNote(null);
@@ -536,7 +564,8 @@ function AutomationPanelEditor({
         toast.success(schedEnabled ? `Schedule saved. It runs ${days} at ${schedTime}.` : "Schedule turned off.");
       } else if (action === "run") {
         const data = await sheetApi("/api/automation/schedule", "POST", { action: "run-now" });
-        setSchedNote({ ok: !data.note, text: data.note ?? `Queued ${data.prepared} email${data.prepared === 1 ? "" : "s"}. They are sent with pauses of about ${pause} seconds per account.` });
+        const noWork = typeof data.note === "string" && /^(No unsent addresses|All unsent addresses|No sending accounts|All assigned sending accounts|No assigned sending accounts|All enabled sending accounts)/.test(data.note);
+        setSchedNote({ ok: !data.note || noWork, text: data.note ?? `Queued ${data.prepared} email${data.prepared === 1 ? "" : "s"}. They are sent with pauses of about ${pause} seconds per account.` });
         if (data.note) toast.info(data.note);
         else toast.success(`Queued ${data.prepared} email${data.prepared === 1 ? "" : "s"}. They are sent with pauses between them.`);
       } else {
@@ -936,6 +965,13 @@ function AutomationPanelEditor({
                   {saving && <SpinnerIcon />} {configured ? "Save and re-import" : "Import sheet"}
                 </button>
               </form>
+              {configured && settings && (
+                <div className="flex justify-end border-t border-line pt-4">
+                  <button type="button" onClick={confirmRemoveSheet} disabled={!automationId || automationId.startsWith("legacy:") || busy || saving} className="btn-ghost min-h-10 px-3 text-sm text-red-700">
+                    Remove sheet from automation
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </details>
@@ -969,7 +1005,7 @@ function AutomationPanelEditor({
         <div className="grid items-start gap-5 lg:grid-cols-2">
           <Card title="Sending accounts" icon={<UsersIcon className="h-5 w-5 text-accent" />}>
             <p className="mb-4 border-b border-line pb-4 text-sm text-ink-soft">
-              Add or remove accounts from this sheet. Pause an account temporarily with its checkbox; paused accounts stay on the list. Set a daily limit for each account.
+              Add or remove accounts from this sheet. Keep an account checked to include it in automation; uncheck it to pause it temporarily. Set a daily limit for each account.
             </p>
             <div className="mb-4 flex flex-wrap gap-2">
               <select aria-label="Choose a sending account to add" value={addAccountId} onChange={(event) => setAddAccountId(event.target.value)} className="input min-w-[220px] flex-1">
@@ -986,9 +1022,9 @@ function AutomationPanelEditor({
                   <label className="flex min-h-[40px] min-w-0 flex-1 cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
-                      checked={!r.enabled}
-                      onChange={(e) => setRows((prev) => prev.map((x, j) => (j === i ? { ...x, enabled: !e.target.checked } : x)))}
-                      aria-label={`Temporarily pause ${r.email} for this sheet`}
+                      checked={r.enabled}
+                      onChange={(e) => setRows((prev) => prev.map((x, j) => (j === i ? { ...x, enabled: e.target.checked } : x)))}
+                      aria-label={`Enable ${r.email} for automation on this sheet`}
                       className="h-4 w-4 shrink-0 accent-accent"
                     />
                     <span className="min-w-0">
@@ -1089,6 +1125,7 @@ function AutomationPanelEditor({
 
             <div aria-live="polite" className="mt-4 space-y-3">
               {schedNote && <Alert tone={schedNote.ok ? "ok" : "error"}>{schedNote.text}</Alert>}
+              {schedInfo && <Alert tone="ok">Last run: {schedInfo}</Alert>}
               {schedError && <Alert>Last run problem: {schedError}</Alert>}
             </div>
 

@@ -54,7 +54,7 @@ export default function AppHeader({
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2.5" aria-label="Outbox dashboard">
               <Logo className="h-8 w-16" />
-              <span className="font-brand text-xl font-semibold tracking-wide text-ink">Outbox</span>
+              <span className="font-brand text-2xl font-semibold tracking-wide text-ink">Outbox</span>
             </Link>
             <nav aria-label="Main" className="hidden items-center gap-1 sm:flex">
               <NavLinks active={active} isAdmin={isAdmin} />

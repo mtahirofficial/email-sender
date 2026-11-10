@@ -12,7 +12,7 @@ import { PlusIcon } from "@/components/icons";
 export const metadata: Metadata = { title: "Blog manager", robots: { index: false, follow: false } };
 
 export default async function AdminBlogPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 // Lets statically generated pages (landing, blog, legal) show the signed-in header.
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

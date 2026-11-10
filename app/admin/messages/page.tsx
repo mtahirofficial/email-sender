@@ -8,7 +8,7 @@ import MessagesList, { type ContactMessage } from "@/components/admin/MessagesLi
 export const metadata: Metadata = { title: "Messages", robots: { index: false, follow: false } };
 
 export default async function AdminMessagesPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

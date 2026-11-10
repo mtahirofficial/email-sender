@@ -4,7 +4,7 @@ import { AutomationError, automationErrorResponse } from "@/lib/automation";
 import { listConnectedAccounts } from "@/lib/accounts";
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

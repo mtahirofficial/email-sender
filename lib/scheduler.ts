@@ -49,11 +49,26 @@ export function sendsOnWeekday(settings: { send_saturday?: boolean }, weekday: n
 /** Writes today's emails (AI) and queues them with paced send times. */
 export async function prepareDay(admin: SupabaseClient, settings: OutreachSettings): Promise<{ queued: number; note?: string }> {
   const { accessToken } = await getSheetsAccess(admin, settings.user_id, settings.account_id);
-  const { pool } = await computePending(admin, accessToken, settings);
+  const { pool, stats } = await computePending(admin, accessToken, settings);
   const senders = await listSenders(admin, settings.user_id, settings.id);
   const used = await usedTodayByAccount(admin, settings);
   let plan = assignItems(pool, senders, used);
-  if (plan.length === 0) return { queued: 0, note: "Nothing to send: every sender is at its limit, or no unsent addresses are left." };
+  if (plan.length === 0) {
+    if (pool.length === 0) {
+      return { queued: 0, note: stats.pending === 0 ? "No unsent addresses remain in this sheet." : "All unsent addresses are already waiting in the schedule." };
+    }
+    if (senders.length === 0) return { queued: 0, note: "No sending accounts are assigned to this sheet." };
+    const ready = senders.filter((sender) => sender.enabled && !sender.needsReconnect);
+    if (ready.length === 0) {
+      const note = senders.every((sender) => sender.needsReconnect)
+        ? "All assigned sending accounts need to be reconnected."
+        : senders.every((sender) => !sender.enabled)
+          ? "All assigned sending accounts are paused."
+          : "No assigned sending accounts are both enabled and connected.";
+      return { queued: 0, note };
+    }
+    return { queued: 0, note: "All enabled sending accounts have reached their daily limits." };
+  }
 
   // Scheduled runs share the same daily AI allowance as everything else. A user with their own
   // Groq key has no allowance from Outbox (limit is null) and their emails are written with that key.

@@ -7,7 +7,7 @@ import SiteFooter from "@/components/marketing/SiteFooter";
 export const metadata: Metadata = { title: "Verify emails", robots: { index: false, follow: false } };
 
 export default async function VerifyPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

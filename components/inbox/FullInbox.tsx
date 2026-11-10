@@ -114,13 +114,13 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             setQuery(typed.trim());
           }}
-          className="flex min-w-0 flex-1 gap-2"
+          className="flex min-w-0 w-full flex-1 gap-2"
         >
           <input
             value={typed}
@@ -163,7 +163,7 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
       )}
 
       {items && (
-        <ul className={`mt-3 max-h-[60vh] divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${loading ? "opacity-60" : ""}`}>
+        <ul className={`mt-3 max-h-[60vh] min-w-0 divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${loading ? "opacity-60" : ""}`}>
           {items.length === 0 && <li className="px-2 py-8 text-center text-sm text-ink-soft">{query ? "Nothing matches that search." : "The inbox is empty."}</li>}
           {items.map((m) => (
             <li key={m.id} className="flex items-center gap-1 rounded-lg hover:bg-mist">

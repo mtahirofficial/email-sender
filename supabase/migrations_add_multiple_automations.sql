@@ -5,6 +5,9 @@ alter table public.outreach_settings
   add column if not exists id uuid default gen_random_uuid();
 
 alter table public.outreach_settings alter column id set not null;
+-- The existing sender FK may point automation_id at the old user_id primary key.
+-- Drop it before replacing that key, then recreate it below against the new id.
+alter table public.outreach_senders drop constraint if exists outreach_senders_automation_fk;
 alter table public.outreach_settings drop constraint if exists outreach_settings_pkey;
 alter table public.outreach_settings add constraint outreach_settings_pkey primary key (id);
 create unique index if not exists outreach_settings_user_sheet_idx

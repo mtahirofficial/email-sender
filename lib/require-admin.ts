@@ -4,7 +4,7 @@ import { isAdminUser } from "@/lib/admin";
 
 /** For API routes: resolves to the admin user, or a ready-made error response. */
 export async function requireAdmin() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

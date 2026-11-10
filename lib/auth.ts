@@ -9,9 +9,9 @@ import { hasSupabaseSession } from "@/lib/supabase/session-cookie";
  * cookie (including search crawlers), and is memoised per request.
  */
 export const getOptionalUser = cache(async () => {
-  if (!hasSupabaseSession(cookies().getAll())) return null;
+  if (!hasSupabaseSession((await cookies()).getAll())) return null;
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

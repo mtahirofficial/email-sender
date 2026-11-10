@@ -6,7 +6,7 @@ import { queueSummary, runTickForUser } from "@/lib/scheduler";
 export const maxDuration = 60;
 
 async function authed() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -19,9 +19,21 @@ export async function GET(request: NextRequest) {
   try {
     const settings = await getSettings(supabase, user.id, request.nextUrl.searchParams.get("automationId"));
     if (!settings) return NextResponse.json({ configured: false });
+    const legacyNoWorkNote = settings.schedule_error?.startsWith("Nothing to send:")
+      ? "No emails were queued because no unsent addresses were available or the sending accounts had reached their daily limits."
+      : null;
+    const lastRunNote = legacyNoWorkNote ?? (settings.schedule_error?.startsWith("No unsent addresses")
+      || settings.schedule_error?.startsWith("All unsent addresses")
+      || settings.schedule_error?.startsWith("No sending accounts")
+      || settings.schedule_error?.startsWith("All assigned sending accounts")
+      || settings.schedule_error?.startsWith("No assigned sending accounts")
+      || settings.schedule_error?.startsWith("All enabled sending accounts")
+      ? settings.schedule_error
+      : null);
     return NextResponse.json({
       configured: true,
-      error: settings.schedule_error,
+      error: lastRunNote ? null : settings.schedule_error,
+      note: lastRunNote,
       lastDay: settings.last_scheduled_day,
       queue: await queueSummary(supabase, user.id, settings.timezone, settings.spreadsheet_id),
     });

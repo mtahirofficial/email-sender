@@ -8,8 +8,9 @@ import PostEditor from "@/components/admin/PostEditor";
 
 export const metadata: Metadata = { title: "Edit post", robots: { index: false, follow: false } };
 
-export default async function EditPostPage({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+export default async function EditPostPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

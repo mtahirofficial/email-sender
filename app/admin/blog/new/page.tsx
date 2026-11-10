@@ -8,7 +8,7 @@ import PostEditor from "@/components/admin/PostEditor";
 export const metadata: Metadata = { title: "New post", robots: { index: false, follow: false } };
 
 export default async function NewPostPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

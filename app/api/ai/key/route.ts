@@ -6,7 +6,7 @@ import { AI_DAILY_LIMIT, getAiUsage } from "@/lib/ai-usage";
 // The browser never receives a saved key: it only learns whether one exists and its last 4 characters.
 
 async function currentUser() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

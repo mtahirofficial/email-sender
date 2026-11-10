@@ -8,7 +8,7 @@ import PresetsManager, { type PresetRow } from "@/components/admin/PresetsManage
 export const metadata: Metadata = { title: "AI presets", robots: { index: false, follow: false } };
 
 export default async function AdminPresetsPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

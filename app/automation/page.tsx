@@ -13,7 +13,7 @@ import AutomationPanel, { type GoogleAccount, type SettingsView } from "@/compon
 export const metadata: Metadata = { title: "Automation", robots: { index: false, follow: false } };
 
 export default async function AutomationPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

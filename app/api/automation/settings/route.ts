@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { AutomationError, automationErrorResponse, computePending, getSheetsAccess, type OutreachSettings } from "@/lib/automation";
 import { EXTRA_COLUMN_LIMIT, parseExtraCols, parseSpreadsheetUrl, resolveSheetTitle } from "@/lib/sheets";
 
@@ -8,7 +8,7 @@ export const maxDuration = 60;
 const COLUMN = /^[A-Za-z]$/;
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -88,6 +88,42 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
 
     return NextResponse.json({ ok: true, settings: saved, sheetTitle, stats });
+  } catch (err) {
+    return automationErrorResponse(err);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+
+  try {
+    const automationId = request.nextUrl.searchParams.get("automationId") ?? "";
+    if (!/^[0-9a-f-]{36}$/i.test(automationId)) throw new AutomationError("Choose a sheet to remove.");
+
+    const { data: sheet, error: lookupError } = await supabase
+      .from("outreach_settings")
+      .select("id, spreadsheet_id")
+      .eq("id", automationId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!sheet) throw new AutomationError("This sheet was not found.", 404);
+
+    // The service client is used only after verifying this sheet belongs to the signed-in user.
+    const admin = createAdminClient();
+    const cleanups = await Promise.all([
+      admin.from("outreach_queue").delete().eq("user_id", user.id).eq("spreadsheet_id", sheet.spreadsheet_id).eq("status", "pending"),
+      admin.from("outreach_drafts").delete().eq("user_id", user.id).eq("spreadsheet_id", sheet.spreadsheet_id),
+      admin.from("outreach_senders").delete().eq("user_id", user.id).eq("automation_id", automationId),
+    ]);
+    const cleanupError = cleanups.find((result) => result.error)?.error;
+    if (cleanupError) throw cleanupError;
+
+    const { error: deleteError } = await admin.from("outreach_settings").delete().eq("id", automationId).eq("user_id", user.id);
+    if (deleteError) throw deleteError;
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return automationErrorResponse(err);
   }

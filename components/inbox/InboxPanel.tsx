@@ -261,15 +261,24 @@ export default function InboxPanel() {
   const canRead = Boolean(selected && selected.provider === "google" && selected.inbox_enabled);
 
   return (
-    <div className="grid gap-5 md:grid-cols-[260px_minmax(0,1fr)]">
-      <aside aria-label="Mailboxes" className="card h-fit p-3">
-        <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">Mailboxes</p>
-        <ul className="flex gap-1 overflow-x-auto md:block md:space-y-1 md:overflow-visible">
+    <div className="grid min-w-0 gap-3 md:gap-5 md:grid-cols-[260px_minmax(0,1fr)]">
+      <aside aria-label="Mailboxes" className="card min-w-0 h-fit p-3">
+        <label htmlFor="inbox-mailbox" className="mb-1.5 block px-1 text-xs font-semibold uppercase tracking-wide text-ink-soft md:hidden">Mailbox</label>
+        <select
+          id="inbox-mailbox"
+          value={selected?.id ?? ""}
+          onChange={(event) => pick(event.target.value)}
+          className="input min-h-11 md:hidden"
+        >
+          {accounts.map((a) => <option key={a.id} value={a.id}>{a.email}</option>)}
+        </select>
+        <p className="hidden px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft md:block">Mailboxes</p>
+        <ul className="hidden gap-1 md:block md:space-y-1">
           {accounts.map((a) => {
             const active = a.id === selected?.id;
             const s = stats(a.id);
             return (
-              <li key={a.id} className="shrink-0 md:shrink">
+              <li key={a.id}>
                 <button
                   type="button"
                   onClick={() => pick(a.id)}
@@ -277,7 +286,7 @@ export default function InboxPanel() {
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm ${active ? "bg-accent-soft text-accent-deep" : "text-ink hover:bg-mist"}`}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block max-w-[220px] truncate font-medium md:max-w-none">{a.email}</span>
+                    <span className="block min-w-0 truncate font-medium">{a.email}</span>
                     <span className="block text-xs opacity-70">
                       {a.provider !== "google" ? "Outlook: not supported yet" : !a.inbox_enabled ? "Not allowed yet" : s.due > 0 ? `${s.due} need a follow-up` : "Up to date"}
                     </span>
@@ -294,7 +303,7 @@ export default function InboxPanel() {
         </ul>
       </aside>
 
-      <div className="min-w-0 space-y-5">
+      <div className="min-w-0 space-y-3 sm:space-y-5">
         {selected && selected.provider !== "google" && (
           <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">Replies for Outlook accounts are not supported yet. Use a Gmail account here.</p>
         )}
@@ -319,9 +328,9 @@ export default function InboxPanel() {
         ))}
 
         {canRead && (
-          <div className="card p-4 sm:p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Conversations">
+          <div className="card min-w-0 p-3 sm:p-5">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="-mx-1 flex max-w-full gap-1.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0" role="tablist" aria-label="Conversations">
                 {TABS.map((t) => (
                   <button
                     key={t.key}
@@ -329,14 +338,14 @@ export default function InboxPanel() {
                     role="tab"
                     aria-selected={tab === t.key}
                     onClick={() => setTab(t.key)}
-                    className={`rounded-full border px-3 py-1.5 text-sm font-medium ${tab === t.key ? "border-accent bg-accent-soft text-accent-deep" : "border-line bg-white text-ink-soft hover:bg-mist"}`}
+                    className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-medium ${tab === t.key ? "border-accent bg-accent-soft text-accent-deep" : "border-line bg-white text-ink-soft hover:bg-mist"}`}
                   >
                     {t.label}{t.key !== "all" && <span className="text-xs"> {counts[t.key]}</span>}
                     {t.key === "done" && hasNewDone && <span className="ml-1 inline-block h-2 w-2 rounded-full bg-accent" aria-label="New reply in Done" />}
                   </button>
                 ))}
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
                 {tab === "followup" && counts.followup > 0 && (
                   <>
                     <button type="button" onClick={draftAll} disabled={bulk !== null} className="btn-primary min-h-[40px] px-3.5 text-sm">
@@ -385,7 +394,8 @@ export default function InboxPanel() {
               </div>
             )}
 
-            <ul className={`mt-4 max-h-[60vh] divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${tab === "all" ? "hidden" : ""}`}>
+            <ul className={`mt-4 min-w-0 divide-y divide-line  overscroll-contain pr-1 ${tab === "all" ? "hidden" : ""}`}>
+              {/* <ul className={`mt-4 min-w-0 max-h-[60vh] divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${tab === "all" ? "hidden" : ""}`}> */}
               {list.length === 0 && (
                 <li className="px-2 py-8 text-center text-sm text-ink-soft">
                   {tab === "replies" ? "No replies waiting for an answer." : tab === "followup" ? "Nothing needs a follow-up yet." : tab === "waiting" ? "No emails are waiting for a reply." : "Nothing here yet."}
@@ -425,7 +435,7 @@ export default function InboxPanel() {
       </div>
 
       {mailOpen && (
-        <Conversation key={mailOpen.id} item={mailOpen} onDraft={() => {}} onClose={() => setMailOpen(null)} onChanged={async () => {}} next={() => setMailOpen(null)} />
+        <Conversation key={mailOpen.id} item={mailOpen} onDraft={() => { }} onClose={() => setMailOpen(null)} onChanged={async () => { }} next={() => setMailOpen(null)} />
       )}
 
       {opened && (
@@ -521,7 +531,7 @@ function Conversation({
     if (!item.reply_unseen) return;
     post("/api/inbox/status", { id: item.id, action: "seen" })
       .then(() => onChanged(false))
-      .catch(() => {});
+      .catch(() => { });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
 
@@ -602,18 +612,18 @@ function Conversation({
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label={`Conversation with ${item.to_email}`} className="flex h-full w-full max-w-2xl flex-col bg-white shadow-lift">
-        <div className="flex items-start gap-3 border-b border-line px-5 py-4">
+        <div className="flex min-w-0 items-start gap-2 border-b border-line px-3 py-3 sm:gap-3 sm:px-5 sm:py-4">
           <div className="min-w-0 flex-1">
             <p className="break-all font-semibold text-ink">{item.to_email}</p>
             <p className="truncate text-sm text-ink-soft">{item.subject}</p>
           </div>
-          {messages?.some((m) => m.unread) && <button type="button" onClick={() => void updateMail("mark-read")} disabled={busy !== ""} title="Mark thread as read" className="btn-ghost min-h-[40px] px-3 text-sm"><MarkReadIcon className="h-4 w-4" /> Mark read</button>}
+          {messages?.some((m) => m.unread) && <button type="button" onClick={() => void updateMail("mark-read")} disabled={busy !== ""} title="Mark thread as read" className="btn-ghost min-h-10 shrink-0 px-2 text-xs sm:px-3 sm:text-sm"><MarkReadIcon className="h-4 w-4" /><span className="hidden sm:inline">Mark read</span></button>}
           <button type="button" onClick={onClose} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-mist">
             <XIcon className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4">
+        <div className="min-w-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4">
           {problem && (
             <p role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
               <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" /> {problem}
@@ -625,7 +635,7 @@ function Conversation({
             </p>
           )}
           {messages?.map((m, i) => (
-            <div key={i} className={`rounded-xl px-3.5 py-2.5 text-sm ${m.fromMe ? "ml-8 bg-accent-soft text-accent-deep" : "mr-8 bg-mist text-ink"}`}>
+            <div key={i} className={`min-w-0 rounded-xl px-3.5 py-2.5 text-sm ${m.fromMe ? "ml-3 bg-accent-soft text-accent-deep sm:ml-8" : "mr-3 bg-mist text-ink sm:mr-8"}`}>
               <div className="mb-1 flex items-center gap-2 text-xs opacity-70">
                 <p className="min-w-0 flex-1 truncate">{m.fromMe ? "You" : m.from} · {new Date(m.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
                 <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} title={m.starred ? "Remove star" : "Star message"} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} className={`rounded p-1 ${m.starred ? "text-amber-500" : "hover:text-amber-500"}`}><StarIcon className="h-4 w-4" /></button>
@@ -641,7 +651,7 @@ function Conversation({
           )}
         </div>
 
-        <div className="space-y-3 border-t border-line px-5 py-4">
+        <div className="space-y-3 border-t border-line px-3 py-3 sm:px-5 sm:py-4">
           {kind && !promptOpen && (
             <>
               <label htmlFor="draft-text" className="label">

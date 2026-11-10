@@ -7,7 +7,7 @@ import { addAiUsage, getAiAccess, type AiAccess } from "@/lib/ai-usage";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

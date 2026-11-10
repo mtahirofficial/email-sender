@@ -9,7 +9,7 @@ export default function SiteFooter() {
         <div className="max-w-sm">
           <div className="flex items-center gap-2.5">
             <Logo className="h-7 w-14" />
-            <span className="font-brand text-lg font-semibold tracking-wide text-ink">{SITE_NAME}</span>
+            <span className="font-brand text-2xl font-semibold tracking-wide text-ink">{SITE_NAME}</span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">
             Send individual emails from your own Gmail or Outlook address, with send-only access.
