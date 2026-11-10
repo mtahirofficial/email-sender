@@ -1,5 +1,8 @@
 node_modules
 .next
+.npm-cache
+.tmp
+*.tsbuildinfo
 .env.local
 .env
 *.log
