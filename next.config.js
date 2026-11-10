@@ -14,6 +14,7 @@ const securityHeaders = [
 const noFraming = [{ key: "X-Frame-Options", value: "SAMEORIGIN" }];
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
 const nextConfig = {
   reactStrictMode: true,
@@ -52,4 +53,10 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = (phase) => ({
+  ...nextConfig,
+  // Isolate dev and production output so either can run without locking the other.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next-build",
+  // Avoid recursive cleanup hitting Windows' transient file locks on generated manifests.
+  cleanDistDir: process.platform !== "win32",
+});
