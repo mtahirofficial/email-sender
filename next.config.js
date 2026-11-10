@@ -17,6 +17,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
 const nextConfig = {
+  output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
