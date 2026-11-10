@@ -9,3 +9,5 @@ node_modules
 .DS_Store
 /.npm-cache
 /.tmp
+/.next-build
+/.next-dev
