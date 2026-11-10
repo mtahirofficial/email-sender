@@ -123,7 +123,7 @@ export function Logo({ className = "h-8 w-12" }: IconProps) {
   return (
     <span className={`${className} grid shrink-0 place-items-center`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logo.png" alt="" width={600} height={266} decoding="async" className="h-full w-full object-contain" />
+      <img src="/logo.png" alt="" width={600} height={265} decoding="async" className="h-full w-full object-contain" />
     </span>
   );
 }
