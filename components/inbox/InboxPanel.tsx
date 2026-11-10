@@ -510,6 +510,7 @@ function Conversation({
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [needsPermission, setNeedsPermission] = useState(false);
   const [text, setText] = useState(draft?.body ?? "");
   const [info, setInfo] = useState<{ summary?: string; intent?: string } | null>(item.ai_summary ? { summary: item.ai_summary, intent: item.ai_intent ?? undefined } : null);
   const [busy, setBusy] = useState<"" | "draft" | "send" | "status" | "mail-action">("");
@@ -554,6 +555,7 @@ function Conversation({
       else if (messageId) setMessages((current) => current?.map((m) => m.id === messageId ? { ...m, starred: action === "star" } : m) ?? null);
       await onChanged(false);
     } catch (err) {
+      if (err instanceof ApiError && err.data.needsPermission === true) setNeedsPermission(true);
       toast.error(err instanceof Error ? err.message : "Could not update this message.");
     } finally {
       setBusy("");
@@ -624,6 +626,11 @@ function Conversation({
         </div>
 
         <div className="min-w-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 sm:py-4">
+          {needsPermission && (
+            <p role="alert" className="rounded-lg border border-amber/40 bg-amber-soft px-3 py-2.5 text-sm text-amber">
+              Gmail needs to grant message-management access before Outbox can mark messages read or star them. <a href="/oauth/google?inbox=1&amp;next=%2Finbox" className="font-semibold underline underline-offset-2">Reconnect Gmail</a> and allow Inbox access.
+            </p>
+          )}
           {problem && (
             <p role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
               <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" /> {problem}

@@ -34,20 +34,30 @@ export async function GET(request: NextRequest) {
 
   try {
     const tokens = await exchangeGoogleCode(code);
-    if (!tokens.refresh_token) {
-      // Happens if the user had already granted consent before without
-      // revoking access — Google only issues a refresh_token on first consent.
-      return NextResponse.redirect(
-        new URL(
-          `/settings?error=${encodeURIComponent(
-            "Google didn't return a refresh token. Remove this app's access at https://myaccount.google.com/permissions and try connecting again."
-          )}`,
-          appUrl
-        )
-      );
-    }
-
     const email = await getGoogleUserEmail(tokens.access_token);
+
+    // When adding Inbox permission to an existing Google connection, Google may
+    // omit a new refresh token. Keep the saved one; a new account still needs one.
+    if (!tokens.refresh_token) {
+      const { data: existing, error } = await supabase
+        .from("connected_accounts")
+        .select("refresh_token")
+        .eq("user_id", user.id)
+        .eq("provider", "google")
+        .eq("email", email)
+        .maybeSingle();
+      if (error) throw error;
+      if (!existing?.refresh_token) {
+        return NextResponse.redirect(
+          new URL(
+            `/settings?error=${encodeURIComponent(
+              "Google didn't return a refresh token. Remove this app's access in your Google Account and try connecting again."
+            )}`,
+            appUrl
+          )
+        );
+      }
+    }
 
     // Google lets people untick individual permissions, so check what was really granted.
     const sheetsFlow = request.cookies.get("google_oauth_sheets")?.value === "1";

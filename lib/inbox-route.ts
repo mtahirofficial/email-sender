@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { AccountAuthError, accountErrorInfo } from "@/lib/accounts";
-import { GoogleReadScopeError } from "@/lib/google";
+import { GoogleModifyScopeError, GoogleReadScopeError } from "@/lib/google";
 import { GmailApiError } from "@/lib/gmail-read";
 import { InboxError } from "@/lib/inbox";
 
@@ -22,6 +22,12 @@ export async function inboxRoute(fn: (ctx: { supabase: SupabaseClient; user: Use
     return NextResponse.json(await fn({ supabase, user }));
   } catch (err) {
     if (err instanceof InboxError) return NextResponse.json({ error: err.message, ...err.extra }, { status: err.status });
+    if (err instanceof GoogleModifyScopeError) {
+      return NextResponse.json({
+        error: "Google hasn't granted permission to change messages for this Gmail account. Reconnect it and allow Inbox access to mark messages read or star them.",
+        needsPermission: true,
+      }, { status: 409 });
+    }
     if (err instanceof GoogleReadScopeError) {
       return NextResponse.json({ error: "Allow Outbox to manage this Gmail inbox first.", needsPermission: true }, { status: 409 });
     }

@@ -30,6 +30,9 @@ export class GoogleScopeError extends Error {}
 /** Thrown when reading mail fails because the account did not allow Outbox to read replies. */
 export class GoogleReadScopeError extends Error {}
 
+/** Thrown when an access token can read Gmail but cannot change message labels. */
+export class GoogleModifyScopeError extends Error {}
+
 /**
  * Asks Google which permissions an access token really has.
  * true / false when Google answers, null when it can't be checked right now.
@@ -61,6 +64,7 @@ export function getGoogleAuthUrl(state: string, withSheets = false, withInbox = 
     ].join(" "),
     access_type: "offline", // required to receive a refresh_token
     prompt: "consent", // forces Google to re-issue a refresh_token every time
+    include_granted_scopes: "true",
     state,
   });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;

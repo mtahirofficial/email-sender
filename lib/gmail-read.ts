@@ -1,4 +1,4 @@
-import { GoogleReadScopeError } from "@/lib/google";
+import { GoogleModifyScopeError, GoogleReadScopeError } from "@/lib/google";
 
 // Reads replies from Gmail. Only used when the person turned on the Inbox for that account.
 // Message text is read on demand and never stored by Outbox.
@@ -299,7 +299,7 @@ async function gmailModify(accessToken: string, path: string, body: { addLabelId
   if (!res.ok) {
     const text = await res.text();
     if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {
-      throw new GoogleReadScopeError("This account did not allow Outbox to manage inbox messages.");
+      throw new GoogleModifyScopeError("This account did not allow Outbox to change Gmail message labels.");
     }
     throw new GmailApiError(res.status, `Gmail ${res.status}: ${text.slice(0, 300)}`);
   }

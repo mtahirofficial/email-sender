@@ -24,7 +24,7 @@ export async function saveConnectedAccount(
     provider: Provider;
     email: string;
     accessToken: string;
-    refreshToken: string;
+    refreshToken?: string;
     expiresInSeconds: number;
     /** Google only: whether the token also carries Google Sheets access. */
     sheetsEnabled?: boolean;
@@ -40,7 +40,7 @@ export async function saveConnectedAccount(
       provider: params.provider,
       email: params.email,
       access_token: encryptToken(params.accessToken),
-      refresh_token: encryptToken(params.refreshToken),
+      ...(params.refreshToken ? { refresh_token: encryptToken(params.refreshToken) } : {}),
       expires_at: expiresAt,
     },
     { onConflict: "user_id,provider,email" }
