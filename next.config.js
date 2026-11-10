@@ -56,7 +56,12 @@ const nextConfig = {
 module.exports = (phase) => ({
   ...nextConfig,
   // Isolate dev and production output so either can run without locking the other.
-  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next-build",
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
   // Avoid recursive cleanup hitting Windows' transient file locks on generated manifests.
   cleanDistDir: process.platform !== "win32",
+  experimental: {
+    ...nextConfig.experimental,
+    // CI containers can report many host CPUs but have a much smaller thread quota.
+    cpus: 2,
+  },
 });
