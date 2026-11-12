@@ -92,10 +92,13 @@ export async function listInbox(supabase: SupabaseClient, userId: string) {
     inbox_enabled: Boolean(a.inbox_enabled),
     sheets_enabled: Boolean(a.sheets_enabled),
   }));
-  const columns = "id, account_id, to_email, subject, sent_at, status, reply_from, reply_snippet, reply_at, follow_up_count, last_follow_up_at, ai_intent, ai_summary";
+  const columns = "id, account_id, to_email, subject, sent_at, status, reply_from, reply_snippet, reply_at, follow_up_count, last_follow_up_at, ai_intent, ai_summary, auto_follow_up_claimed_at, auto_follow_up_sending_at";
   const query = (cols: string) => supabase.from("conversations").select(cols).eq("user_id", userId).order("sent_at", { ascending: false }).limit(1000);
   let result = await query(`${columns}, reply_unseen`);
-  if (result.error && /reply_unseen/i.test(result.error.message ?? "")) result = await query(columns); // migration not run yet
+  if (result.error && /reply_unseen|auto_follow_up_claimed_at|auto_follow_up_sending_at/i.test(result.error.message ?? "")) {
+    result = await query(columns.replace(", auto_follow_up_claimed_at, auto_follow_up_sending_at", ""));
+    if (result.error && /reply_unseen/i.test(result.error.message ?? "")) result = await query(columns.replace(", ai_summary, auto_follow_up_claimed_at, auto_follow_up_sending_at", ", ai_summary"));
+  }
   if (result.error) throw result.error;
   const data = (result.data ?? []) as unknown as Record<string, any>[];
 
@@ -117,6 +120,7 @@ export async function listInbox(supabase: SupabaseClient, userId: string) {
   const items = data.map((c) => ({
     ...c,
     reply_unseen: Boolean(c.reply_unseen),
+    followUpSending: Boolean(c.auto_follow_up_sending_at && Date.now() - Date.parse(c.auto_follow_up_sending_at) >= 0 && Date.now() - Date.parse(c.auto_follow_up_sending_at) < 10 * 60_000),
     followUpDue:
       !autoManaged.has(`${c.account_id}::${String(c.to_email).toLowerCase()}`) &&
       c.status === "waiting" &&

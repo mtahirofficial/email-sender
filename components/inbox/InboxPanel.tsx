@@ -20,6 +20,7 @@ type Item = {
   reply_snippet: string | null;
   reply_at: string | null;
   follow_up_count: number;
+  followUpSending: boolean;
   ai_intent: string | null;
   ai_summary: string | null;
   followUpDue: boolean;
@@ -188,6 +189,13 @@ export default function InboxPanel() {
     const id = setInterval(() => document.visibilityState === "visible" && void sync(false), 120_000);
     return () => clearInterval(id);
   }, [hasReader, sync]);
+
+  const hasSendingFollowUp = Boolean(data?.items.some((item) => item.followUpSending));
+  useEffect(() => {
+    if (!hasSendingFollowUp) return;
+    const id = setInterval(() => document.visibilityState === "visible" && void load(), 5_000);
+    return () => clearInterval(id);
+  }, [hasSendingFollowUp, load]);
 
   const accounts = data?.accounts ?? [];
   const selected = accounts.find((a) => a.id === accountId) ?? accounts.find((a) => a.provider === "google" && a.inbox_enabled) ?? accounts[0] ?? null;
@@ -385,6 +393,7 @@ export default function InboxPanel() {
                       reply_snippet: m.snippet,
                       reply_at: new Date(m.at).toISOString(),
                       follow_up_count: 0,
+                      followUpSending: false,
                       ai_intent: null,
                       ai_summary: null,
                       followUpDue: false,
@@ -412,6 +421,7 @@ export default function InboxPanel() {
                       <span className="min-w-0 break-all text-sm font-semibold text-ink">{item.to_email}</span>
                       {item.ai_intent && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-deep">{INTENT[item.ai_intent] ?? item.ai_intent}</span>}
                       {item.reply_unseen && <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">New reply</span>}
+                      {item.followUpSending && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"><SpinnerIcon className="h-3 w-3" />Sending follow-up</span>}
                       {drafts[item.id] && <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium text-ink">Draft ready</span>}
                       <span className="ml-auto text-xs text-ink-soft">{item.status === "replied" || item.reply_unseen ? `Replied ${ago(item.reply_at)}` : `Sent ${ago(item.sent_at)}`}</span>
                     </div>

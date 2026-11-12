@@ -77,22 +77,22 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
       if (!Number.isFinite(scheduledMs) || scheduledMs > Date.now()) continue;
       const now = new Date().toISOString();
       // Compare-and-set the scheduled timestamp to acquire a short sending lock.
-      const claim = await admin.from("conversations").update({ auto_follow_up_claimed_at: now })
+      const claim = await admin.from("conversations").update({ auto_follow_up_claimed_at: now, auto_follow_up_sending_at: now })
         .eq("id", conversation.id).eq("status", "waiting").eq("auto_follow_up_claimed_at", scheduledAt).select("id");
       if (claim.error) {
-        if (/auto_follow_up_claimed_at/i.test(claim.error.message ?? "")) throw new Error("Run supabase/migrations_add_automation_followups.sql to enable automatic follow-ups.");
+        if (/auto_follow_up_claimed_at|auto_follow_up_sending_at/i.test(claim.error.message ?? "")) throw new Error("Run supabase/migrations_add_automation_followups.sql to enable automatic follow-ups.");
         continue;
       }
       if (!claim.data?.length) continue;
       try {
         await sendAutomaticFollowUp(admin, settings.user_id, String(conversation.id), settings.auto_follow_up_ai_notes ?? "", settings.max_follow_ups ?? 2);
-        await admin.from("conversations").update({ auto_follow_up_claimed_at: null }).eq("id", conversation.id);
+        await admin.from("conversations").update({ auto_follow_up_claimed_at: null, auto_follow_up_sending_at: null }).eq("id", conversation.id);
         processed++;
         // Let a later scheduler tick pick the next message; sending multiple
         // overdue slots in one tick would erase the intended spacing.
         break;
       } catch (err) {
-        await admin.from("conversations").update({ auto_follow_up_claimed_at: null }).eq("id", conversation.id);
+        await admin.from("conversations").update({ auto_follow_up_claimed_at: null, auto_follow_up_sending_at: null }).eq("id", conversation.id);
         console.error("scheduler: automatic follow-up failed", err);
       }
     }

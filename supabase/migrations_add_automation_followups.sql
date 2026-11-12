@@ -7,4 +7,5 @@ alter table public.outreach_settings
 
 -- Prevent overlapping cron and page-driven ticks from sending the same follow-up twice.
 alter table public.conversations
-  add column if not exists auto_follow_up_claimed_at timestamptz;
+  add column if not exists auto_follow_up_claimed_at timestamptz,
+  add column if not exists auto_follow_up_sending_at timestamptz;

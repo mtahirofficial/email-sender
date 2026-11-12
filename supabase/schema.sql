@@ -412,6 +412,7 @@ create table if not exists public.conversations (
   follow_up_count integer not null default 0,
   last_follow_up_at timestamptz,
   auto_follow_up_claimed_at timestamptz,
+  auto_follow_up_sending_at timestamptz,
   ai_intent text,
   ai_summary text,
   last_checked_at timestamptz,
