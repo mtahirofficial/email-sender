@@ -36,25 +36,49 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
     if (account && gmailAccounts.has(account)) sentByAccount.set(account, [...(sentByAccount.get(account) ?? []), email]);
   }
   let processed = 0;
+  const nowMs = Date.now();
+  const minFollowUpGapMs = 90_000;
+  const maxFollowUpGapMs = 150_000;
+  const randomGap = () => minFollowUpGapMs + Math.floor(Math.random() * (maxFollowUpGapMs - minFollowUpGapMs + 1));
   // A small per-tick cap keeps background jobs within their time budget.
   for (const [accountId, emails] of sentByAccount) {
     if (processed >= 5) break;
     if (!emails.length) continue;
     const { data: conversations } = await admin.from("conversations")
-      .select("id, to_email, sent_at, last_follow_up_at, follow_up_count, thread_id")
+      .select("id, to_email, sent_at, last_follow_up_at, follow_up_count, thread_id, auto_follow_up_claimed_at")
       .eq("user_id", settings.user_id).eq("account_id", accountId).eq("status", "waiting")
       .in("to_email", [...new Set(emails)]).not("thread_id", "is", null).limit(100);
     const due = (conversations ?? []).filter((conversation) =>
       Number(conversation.follow_up_count ?? 0) < (settings.max_follow_ups ?? 2) &&
-      Date.now() - Date.parse(String(conversation.last_follow_up_at ?? conversation.sent_at)) >= (settings.follow_up_after_days ?? 4) * 86_400_000
-    );
+      nowMs - Date.parse(String(conversation.last_follow_up_at ?? conversation.sent_at)) >= (settings.follow_up_after_days ?? 4) * 86_400_000
+    ).sort((a, b) => Date.parse(String(a.sent_at)) - Date.parse(String(b.sent_at)));
+    // Give each newly due message a persisted send time. The initial time is
+    // randomized across the 12 hours after the configured waiting period, then
+    // later messages are staggered by roughly two minutes. The existing claim
+    // column doubles as the small queue, so no user-facing setting is needed.
+    let nextSlot = Math.max(nowMs, ...(due ?? []).map((conversation) => {
+      const scheduled = Date.parse(String(conversation.auto_follow_up_claimed_at ?? ""));
+      return Number.isFinite(scheduled) ? scheduled : nowMs;
+    }));
     for (const conversation of due) {
       if (processed >= 5) break;
-      const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
+      let scheduledAt = conversation.auto_follow_up_claimed_at as string | null;
+      if (!scheduledAt) {
+        const baseDue = Date.parse(String(conversation.last_follow_up_at ?? conversation.sent_at)) + (settings.follow_up_after_days ?? 4) * 86_400_000;
+        const desiredSlot = baseDue + Math.floor(Math.random() * 12 * 60 * 60_000);
+        const slot = Math.max(desiredSlot, nextSlot);
+        nextSlot = slot + randomGap();
+        scheduledAt = new Date(slot).toISOString();
+        const scheduled = await admin.from("conversations").update({ auto_follow_up_claimed_at: scheduledAt })
+          .eq("id", conversation.id).eq("status", "waiting").is("auto_follow_up_claimed_at", null).select("id");
+        if (scheduled.error || !scheduled.data?.length) continue;
+      }
+      const scheduledMs = Date.parse(scheduledAt);
+      if (!Number.isFinite(scheduledMs) || scheduledMs > Date.now()) continue;
       const now = new Date().toISOString();
+      // Compare-and-set the scheduled timestamp to acquire a short sending lock.
       const claim = await admin.from("conversations").update({ auto_follow_up_claimed_at: now })
-        .eq("id", conversation.id).eq("status", "waiting")
-        .or(`auto_follow_up_claimed_at.is.null,auto_follow_up_claimed_at.lt.${staleBefore}`).select("id");
+        .eq("id", conversation.id).eq("status", "waiting").eq("auto_follow_up_claimed_at", scheduledAt).select("id");
       if (claim.error) {
         if (/auto_follow_up_claimed_at/i.test(claim.error.message ?? "")) throw new Error("Run supabase/migrations_add_automation_followups.sql to enable automatic follow-ups.");
         continue;
@@ -62,7 +86,11 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
       if (!claim.data?.length) continue;
       try {
         await sendAutomaticFollowUp(admin, settings.user_id, String(conversation.id), settings.auto_follow_up_ai_notes ?? "", settings.max_follow_ups ?? 2);
+        await admin.from("conversations").update({ auto_follow_up_claimed_at: null }).eq("id", conversation.id);
         processed++;
+        // Let a later scheduler tick pick the next message; sending multiple
+        // overdue slots in one tick would erase the intended spacing.
+        break;
       } catch (err) {
         await admin.from("conversations").update({ auto_follow_up_claimed_at: null }).eq("id", conversation.id);
         console.error("scheduler: automatic follow-up failed", err);
