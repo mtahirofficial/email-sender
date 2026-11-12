@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
     if (prompt.length < 10) throw new AutomationError("Describe what the emails should say in at least 10 characters.");
     const aiNotes = str(body?.aiNotes);
     if (aiNotes.length > 2000) throw new AutomationError("AI notes must be 2,000 characters or fewer.");
+    const autoFollowUp = body?.autoFollowUp === true;
+    const followUpAfterDays = Math.min(30, Math.max(1, Math.round(Number(body?.followUpAfterDays) || 4)));
+    const maxFollowUps = Math.min(5, Math.max(0, Math.round(Number(body?.maxFollowUps) || 2)));
 
     const timezone = str(body?.timezone) || "UTC";
     const accountId = str(body?.accountId);
@@ -68,6 +71,9 @@ export async function POST(request: NextRequest) {
       extra_cols: extraCols,
       prompt,
       ai_notes: aiNotes,
+      auto_follow_up: autoFollowUp,
+      follow_up_after_days: followUpAfterDays,
+      max_follow_ups: maxFollowUps,
       timezone,
     } as OutreachSettings;
 
@@ -85,6 +91,7 @@ export async function POST(request: NextRequest) {
       ({ data: saved, error } = await supabase.from("outreach_settings").upsert({ ...rest, updated_at: new Date().toISOString() }, { onConflict: "user_id,spreadsheet_id" }).select("*").single());
     }
     if (error && /ai_notes/i.test(error.message ?? "")) throw new AutomationError("To use automation AI notes, run supabase/migrations_add_automation_ai_notes.sql in the Supabase SQL Editor first.");
+    if (error && /auto_follow_up|follow_up_after_days|max_follow_ups/i.test(error.message ?? "")) throw new AutomationError("To use automatic follow-ups, run supabase/migrations_add_automation_followups.sql in the Supabase SQL Editor first.");
     if (error) throw error;
 
     return NextResponse.json({ ok: true, settings: saved, sheetTitle, stats });

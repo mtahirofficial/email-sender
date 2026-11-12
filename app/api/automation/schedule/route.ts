@@ -59,7 +59,18 @@ export async function POST(request: NextRequest) {
         if (!Number.isInteger(pause) || pause < 20 || pause > 900) throw new AutomationError("The pause must be between 20 and 900 seconds.");
         const timezone = typeof body.timezone === "string" && body.timezone ? body.timezone : settings.timezone;
 
-        const fields = { schedule_enabled: body.enabled === true, schedule_time: time, pause_seconds: pause, timezone, schedule_error: null, schedule_retry_at: null };
+        const fields = {
+          schedule_enabled: body.enabled === true,
+          schedule_time: time,
+          pause_seconds: pause,
+          timezone,
+          schedule_error: null,
+          schedule_retry_at: null,
+          auto_follow_up: body.autoFollowUp === true,
+          auto_follow_up_ai_notes: typeof body.autoFollowUpAiNotes === "string" ? body.autoFollowUpAiNotes.trim().slice(0, 2000) : "",
+          follow_up_after_days: Math.min(30, Math.max(1, Math.round(Number(body.followUpAfterDays) || 4))),
+          max_follow_ups: Math.min(5, Math.max(1, Math.round(Number(body.maxFollowUps) || 2))),
+        };
         const sendSaturday = body.sendSaturday === true;
         let { error } = await supabase.from("outreach_settings").update({ ...fields, send_saturday: sendSaturday }).eq("id", settings.id).eq("user_id", user.id);
         if (error && /send_saturday/i.test(error.message ?? "")) {
@@ -67,6 +78,7 @@ export async function POST(request: NextRequest) {
           if (sendSaturday) throw new AutomationError("To send on Saturday, run supabase/migrations_add_send_saturday.sql in the Supabase SQL Editor first.");
           ({ error } = await supabase.from("outreach_settings").update(fields).eq("id", settings.id).eq("user_id", user.id));
         }
+        if (error && /auto_follow_up|follow_up_after_days|max_follow_ups/i.test(error.message ?? "")) throw new AutomationError("To use automatic follow-ups, run supabase/migrations_add_automation_followups.sql in the Supabase SQL Editor first.");
         if (error) throw error;
         return NextResponse.json({ ok: true });
       }

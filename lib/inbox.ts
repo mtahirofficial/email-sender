@@ -99,11 +99,26 @@ export async function listInbox(supabase: SupabaseClient, userId: string) {
   if (result.error) throw result.error;
   const data = (result.data ?? []) as unknown as Record<string, any>[];
 
+  // Keep automatically managed sheet contacts out of the manual follow-up queue.
+  // If the automation migration has not been applied, Inbox remains usable as before.
+  const { data: automatedSheets, error: automationError } = await supabase.from("outreach_settings")
+    .select("spreadsheet_id").eq("user_id", userId).eq("auto_follow_up", true);
+  const autoManaged = new Set<string>();
+  if (!automationError && automatedSheets?.length) {
+    const { data: automatedSends } = await supabase.from("outreach_sends")
+      .select("account_id, email").eq("user_id", userId)
+      .in("spreadsheet_id", automatedSheets.map((sheet) => sheet.spreadsheet_id));
+    for (const send of automatedSends ?? []) {
+      if (send.account_id && send.email) autoManaged.add(`${send.account_id}::${String(send.email).toLowerCase()}`);
+    }
+  }
+
   const now = Date.now();
   const items = data.map((c) => ({
     ...c,
     reply_unseen: Boolean(c.reply_unseen),
     followUpDue:
+      !autoManaged.has(`${c.account_id}::${String(c.to_email).toLowerCase()}`) &&
       c.status === "waiting" &&
       c.follow_up_count < settings.max_follow_ups &&
       now - Date.parse((c.last_follow_up_at as string | null) ?? (c.sent_at as string)) >= settings.follow_up_after_days * DAY,
@@ -298,7 +313,7 @@ export async function openThread(supabase: SupabaseClient, userId: string, input
 }
 
 /** Writes a draft: a reply to what they said, or a follow-up to silence. Costs one AI draft from the daily allowance. */
-export async function draftConversation(supabase: SupabaseClient, userId: string, input: TargetInput, kind: "reply" | "followup", instruction = "") {
+export async function draftConversation(supabase: SupabaseClient, userId: string, input: TargetInput, kind: "reply" | "followup", instruction = "", maxFollowUps?: number, notesOverride?: string) {
   const access = await getAiAccess(userId);
   // Mailbox text only goes to Groq (see AiOptions.groqOnly), so Groq must be available.
   if (!access.ownKey && !process.env.GROQ_API_KEY) throw new InboxError("Replies and follow-ups need a Groq key. Add your own free Groq API key in Settings.", 503, { limitReached: true });
@@ -315,13 +330,13 @@ export async function draftConversation(supabase: SupabaseClient, userId: string
 
   try {
     if (kind === "reply") {
-      const draft = await draftReply(messages, ctx.email, settings.instructions, opts, instruction);
+      const draft = await draftReply(messages, ctx.email, notesOverride ?? settings.instructions, opts, instruction);
       await addAiUsage(userId, 1, access.used);
       // only the "understand" button saves what the AI concluded; a message written from the person's own prompt does not
       if (target.conv && !instruction.trim()) await supabase.from("conversations").update({ ai_intent: draft.intent, ai_summary: draft.summary }).eq("id", target.conv.id);
       return { kind, ...draft };
     }
-    const body = await draftFollowUp(messages, ctx.email, settings.instructions, (target.conv?.follow_up_count ?? 0) + 1, Math.max(1, settings.max_follow_ups), opts, instruction);
+    const body = await draftFollowUp(messages, ctx.email, notesOverride ?? settings.instructions, (target.conv?.follow_up_count ?? 0) + 1, Math.max(1, maxFollowUps ?? settings.max_follow_ups), opts, instruction);
     await addAiUsage(userId, 1, access.used);
     return { kind, body, needsReply: true, summary: "", intent: "other" };
   } catch (err) {
@@ -379,6 +394,13 @@ export async function sendConversation(supabase: SupabaseClient, userId: string,
     await updateConversation(supabase, conv.id, patch);
   }
   return { sentTo: to };
+}
+
+/** Writes and sends an automation follow-up in its existing Gmail thread. */
+export async function sendAutomaticFollowUp(supabase: SupabaseClient, userId: string, conversationId: string, instruction: string, maxFollowUps: number) {
+  const input = { id: conversationId };
+  const draft = await draftConversation(supabase, userId, input, "followup", "", maxFollowUps, instruction);
+  await sendConversation(supabase, userId, input, "followup", draft.body);
 }
 
 export async function setConversationStatus(supabase: SupabaseClient, userId: string, id: string, action: "close" | "reopen" | "seen") {

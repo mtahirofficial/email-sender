@@ -217,6 +217,10 @@ create table if not exists public.outreach_settings (
   sent_col text not null default 'D',
   daily_limit integer not null default 20 check (daily_limit between 1 and 200),
   prompt text not null default '',
+  auto_follow_up boolean not null default false,
+  auto_follow_up_ai_notes text not null default '',
+  follow_up_after_days integer not null default 4 check (follow_up_after_days between 1 and 30),
+  max_follow_ups integer not null default 2 check (max_follow_ups between 0 and 5),
   ai_notes text not null default '',
   timezone text not null default 'UTC',
   updated_at timestamptz not null default now()
@@ -407,6 +411,7 @@ create table if not exists public.conversations (
   reply_at timestamptz,
   follow_up_count integer not null default 0,
   last_follow_up_at timestamptz,
+  auto_follow_up_claimed_at timestamptz,
   ai_intent text,
   ai_summary text,
   last_checked_at timestamptz,

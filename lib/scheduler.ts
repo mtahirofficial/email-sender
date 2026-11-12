@@ -3,6 +3,8 @@ import { AccountAuthError, getValidAccessToken, markNeedsReconnect } from "@/lib
 import { aiErrorMessage, generateEmails, isAiConfigured } from "@/lib/ai";
 import { addAiUsage, getAiAccess } from "@/lib/ai-usage";
 import { logEmailAttempt } from "@/lib/email-logs";
+import { listConnectedAccounts } from "@/lib/accounts";
+import { sendAutomaticFollowUp, syncInbox } from "@/lib/inbox";
 import {
   assignItems, computePending, getSettings, getSheetsAccess, highlightSentToday, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount,
   type OutreachSettings,
@@ -16,6 +18,59 @@ import {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const AI_BATCH = 8;
+
+/** Sends due follow-ups only after syncing Gmail, so a new reply prevents a send. */
+async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSettings) {
+  if (!settings.auto_follow_up) return 0;
+  await syncInbox(admin, settings.user_id, true);
+  const senders = await listSenders(admin, settings.user_id, settings.id);
+  const gmailAccounts = new Set((await listConnectedAccounts(admin, settings.user_id))
+    .filter((account) => account.provider === "google" && account.inbox_enabled && senders.some((sender) => sender.enabled && sender.accountId === account.id))
+    .map((account) => account.id));
+  if (!gmailAccounts.size) return 0;
+  const { data: sent } = await admin.from("outreach_sends").select("email, account_id").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id);
+  const sentByAccount = new Map<string, string[]>();
+  for (const item of sent ?? []) {
+    const account = item.account_id as string | null;
+    const email = String(item.email).toLowerCase();
+    if (account && gmailAccounts.has(account)) sentByAccount.set(account, [...(sentByAccount.get(account) ?? []), email]);
+  }
+  let processed = 0;
+  // A small per-tick cap keeps background jobs within their time budget.
+  for (const [accountId, emails] of sentByAccount) {
+    if (processed >= 5) break;
+    if (!emails.length) continue;
+    const { data: conversations } = await admin.from("conversations")
+      .select("id, to_email, sent_at, last_follow_up_at, follow_up_count, thread_id")
+      .eq("user_id", settings.user_id).eq("account_id", accountId).eq("status", "waiting")
+      .in("to_email", [...new Set(emails)]).not("thread_id", "is", null).limit(100);
+    const due = (conversations ?? []).filter((conversation) =>
+      Number(conversation.follow_up_count ?? 0) < (settings.max_follow_ups ?? 2) &&
+      Date.now() - Date.parse(String(conversation.last_follow_up_at ?? conversation.sent_at)) >= (settings.follow_up_after_days ?? 4) * 86_400_000
+    );
+    for (const conversation of due) {
+      if (processed >= 5) break;
+      const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
+      const now = new Date().toISOString();
+      const claim = await admin.from("conversations").update({ auto_follow_up_claimed_at: now })
+        .eq("id", conversation.id).eq("status", "waiting")
+        .or(`auto_follow_up_claimed_at.is.null,auto_follow_up_claimed_at.lt.${staleBefore}`).select("id");
+      if (claim.error) {
+        if (/auto_follow_up_claimed_at/i.test(claim.error.message ?? "")) throw new Error("Run supabase/migrations_add_automation_followups.sql to enable automatic follow-ups.");
+        continue;
+      }
+      if (!claim.data?.length) continue;
+      try {
+        await sendAutomaticFollowUp(admin, settings.user_id, String(conversation.id), settings.auto_follow_up_ai_notes ?? "", settings.max_follow_ups ?? 2);
+        processed++;
+      } catch (err) {
+        await admin.from("conversations").update({ auto_follow_up_claimed_at: null }).eq("id", conversation.id);
+        console.error("scheduler: automatic follow-up failed", err);
+      }
+    }
+  }
+  return processed;
+}
 
 /** Today's date and minutes-since-midnight in the given timezone. */
 export function localNow(timezone: string) {
@@ -232,7 +287,11 @@ export async function sendDue(admin: SupabaseClient, settings: OutreachSettings,
 /** One tick for one user: write today's emails if it is time, then send what is due. */
 export async function runTickForUser(admin: SupabaseClient, userId: string, opts: { force?: boolean; automationId?: string } = {}) {
   const settings = await getSettings(admin, userId, opts.automationId);
-  if (!settings || !settings.schedule_enabled) return { prepared: 0, sent: 0, failed: 0, note: "Schedule is off." };
+  if (!settings) return { prepared: 0, sent: 0, failed: 0, note: "Schedule is off." };
+  if (!settings.schedule_enabled) {
+    const followUps = await sendDueFollowUps(admin, settings);
+    return { prepared: 0, sent: followUps, failed: 0, note: "Schedule is off." };
+  }
 
   let prepared = 0;
   let note: string | undefined;
@@ -278,12 +337,13 @@ export async function runTickForUser(admin: SupabaseClient, userId: string, opts
   }
 
   const { sent, failed } = await sendDue(admin, settings);
-  return { prepared, sent, failed, note };
+  const followUps = await sendDueFollowUps(admin, settings);
+  return { prepared, sent: sent + followUps, failed, note };
 }
 
 /** One tick for everyone who has the schedule switched on (used by cron). */
 export async function runTickForAll(admin: SupabaseClient) {
-  const { data } = await admin.from("outreach_settings").select("user_id, id").eq("schedule_enabled", true);
+  const { data } = await admin.from("outreach_settings").select("user_id, id").or("schedule_enabled.eq.true,auto_follow_up.eq.true");
   const started = Date.now();
   let users = 0;
   let sent = 0;
@@ -302,7 +362,7 @@ export async function runTickForAll(admin: SupabaseClient) {
 
 /** One page-driven tick for every enabled automation owned by one signed-in user. */
 export async function runTickForUserAll(admin: SupabaseClient, userId: string) {
-  const { data } = await admin.from("outreach_settings").select("id").eq("user_id", userId).eq("schedule_enabled", true);
+  const { data } = await admin.from("outreach_settings").select("id").eq("user_id", userId).or("schedule_enabled.eq.true,auto_follow_up.eq.true");
   const started = Date.now();
   let prepared = 0;
   let sent = 0;

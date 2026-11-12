@@ -12,7 +12,7 @@ import LocalTime from "@/components/LocalTime";
 import { reconnectHref } from "@/lib/reconnect";
 import { useScrollLock } from "@/components/useScrollLock";
 import type { AiPreset } from "@/content/ai-presets";
-import { AlertIcon, CheckIcon, PlusIcon, SheetIcon, ShieldIcon, SparkleIcon, SendIcon, SpinnerIcon, UsersIcon, XIcon } from "@/components/icons";
+import { AlertIcon, CheckIcon, ChevronDownIcon, PlusIcon, SheetIcon, ShieldIcon, SparkleIcon, SendIcon, SpinnerIcon, UsersIcon, XIcon } from "@/components/icons";
 
 export type GoogleAccount = { id: string; email: string; sheets_enabled: boolean };
 export type SenderView = { accountId: string; email: string; provider: "google" | "microsoft"; limit: number; enabled: boolean; needsReconnect: boolean };
@@ -29,6 +29,10 @@ export type SettingsView = {
   extra_cols?: { col: string; header: string }[];
   prompt: string;
   ai_notes?: string;
+  auto_follow_up_ai_notes?: string;
+  auto_follow_up?: boolean;
+  follow_up_after_days?: number;
+  max_follow_ups?: number;
   schedule_enabled: boolean;
   send_saturday?: boolean;
   schedule_time: string;
@@ -298,6 +302,11 @@ function AutomationPanelEditor({
   const [filter, setFilter] = useState({ col: settings ? settings.filter_col ?? "" : "D", value: settings ? settings.filter_value ?? "" : "" });
   const [prompt, setPrompt] = useState(settings?.prompt ?? "");
   const [aiNotes, setAiNotes] = useState(settings?.ai_notes ?? "");
+  const [autoFollowUpAiNotes, setAutoFollowUpAiNotes] = useState(settings?.auto_follow_up_ai_notes ?? "");
+  const [autoFollowUp, setAutoFollowUp] = useState(settings?.auto_follow_up ?? false);
+  const [followUpOpen, setFollowUpOpen] = useState(settings?.auto_follow_up ?? false);
+  const [followUpAfterDays, setFollowUpAfterDays] = useState(settings?.follow_up_after_days ?? 4);
+  const [maxFollowUps, setMaxFollowUps] = useState(settings?.max_follow_ups ?? 2);
   // Optional extra sheet columns: their values are given to the AI, so the prompt can use them by header.
   const [extraCols, setExtraCols] = useState<ExtraCol[]>(settings?.extra_cols ?? []);
   const [savedExtra, setSavedExtra] = useState(JSON.stringify(settings?.extra_cols ?? []));
@@ -490,6 +499,9 @@ function AutomationPanelEditor({
         extraCols,
         prompt,
         aiNotes,
+        autoFollowUp,
+        followUpAfterDays,
+        maxFollowUps,
         timezone: timezone(),
       });
       if (typeof data.settings?.id === "string") {
@@ -557,7 +569,7 @@ function AutomationPanelEditor({
     setSchedNote(null);
     try {
       if (action === "save") {
-        await sheetApi("/api/automation/schedule", "POST", { action: "save", enabled: schedEnabled, time: schedTime, pauseSeconds: pause, timezone: timezone(), sendSaturday });
+        await sheetApi("/api/automation/schedule", "POST", { action: "save", enabled: schedEnabled, time: schedTime, pauseSeconds: pause, timezone: timezone(), sendSaturday, autoFollowUp, followUpAfterDays, maxFollowUps, autoFollowUpAiNotes });
         setSavedEnabled(schedEnabled);
         const days = sendSaturday ? "Monday to Saturday" : "Monday to Friday";
         setSchedNote({ ok: true, text: schedEnabled ? `Schedule saved. It runs ${days} at ${schedTime}.` : "Schedule turned off." });
@@ -928,10 +940,10 @@ function AutomationPanelEditor({
                       maxLength={2000}
                       value={aiNotes}
                       onChange={(event) => setAiNotes(event.target.value)}
-                      placeholder="Add background the AI should know, such as what you offer, useful facts, or your preferred tone. These notes are used only for this sheet’s automation emails."
+                      placeholder="Add background for the initial emails, such as what you offer, useful facts, or your preferred tone."
                       className="input resize-y"
                     />
-                    <p className="mt-1.5 text-xs text-ink-soft">Used for both prepared batches and scheduled emails, together with your instructions and selected sheet details. Up to 2,000 characters.</p>
+                    <p className="mt-1.5 text-xs text-ink-soft">Used for initial emails sent from this sheet, in both prepared batches and the daily schedule. Automatic follow-ups have their own notes below. Up to 2,000 characters.</p>
                   </div>
                   {extraCols.length > 0 && (
                     <div className="mt-2">
@@ -1107,9 +1119,37 @@ function AutomationPanelEditor({
               Sunday is always skipped. Times use {timezoneName || "your local timezone"}. The pause is per account and varies slightly.
             </p>
 
+            <div className="mt-5 border-y border-line">
+              <button type="button" aria-expanded={followUpOpen} onClick={() => setFollowUpOpen((open) => !open)} className="flex min-h-12 w-full items-center gap-3 text-left text-sm font-semibold text-ink">
+                <span className="shrink-0">Follow Automation</span>
+                <span aria-hidden="true" className="h-px flex-1 bg-line" />
+                <ChevronDownIcon className={`h-4 w-4 shrink-0 transition-transform ${followUpOpen ? "rotate-180" : ""}`} />
+              </button>
+              {followUpOpen && <div className="space-y-3 pb-4">
+                <label className="flex cursor-pointer items-start gap-3 text-sm text-ink">
+                  <input type="checkbox" checked={autoFollowUp} onChange={(event) => setAutoFollowUp(event.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />
+                <span><span className="font-medium">Automatically follow up with people who haven’t replied</span><span className="mt-1 block text-xs leading-relaxed text-ink-soft">This sends follow-ups for this sheet without review. It needs Gmail inbox access and Groq AI access. To write and send follow-ups yourself, use the separate manual settings in Settings → Inbox.</span></span>
+                </label>
+                {autoFollowUp && <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-ink">Wait between follow-ups
+                    <span className="mt-1 flex items-center gap-2"><input type="number" min={1} max={30} value={followUpAfterDays} onChange={(event) => setFollowUpAfterDays(Math.min(30, Math.max(1, Number(event.target.value) || 1)))} className="input w-24" /><span className="text-xs text-ink-soft">days</span></span>
+                  </label>
+                  <label className="text-sm text-ink">Maximum follow-ups per person
+                    <select value={maxFollowUps} onChange={(event) => setMaxFollowUps(Number(event.target.value))} className="input mt-1">
+                      {[1, 2, 3, 4, 5].map((count) => <option key={count} value={count}>{count}</option>)}
+                    </select>
+                  </label>
+                </div>}
+                {autoFollowUp && <label className="block text-sm text-ink" htmlFor="auto-follow-up-ai-notes">AI notes for automatic follow-ups
+                  <textarea id="auto-follow-up-ai-notes" rows={3} maxLength={2000} value={autoFollowUpAiNotes} onChange={(event) => setAutoFollowUpAiNotes(event.target.value)} placeholder="Guidance for follow-up messages, such as a detail to emphasize, tone, or a polite closing." className="input mt-1 resize-y" />
+                  <span className="mt-1 block text-xs leading-relaxed text-ink-soft">These notes apply only to automatic follow-ups for this sheet. Initial emails use the AI notes in sheet settings; manual follow-up drafts use the notes in Settings → Inbox.</span>
+                </label>}
+              </div>}
+            </div>
+
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => scheduleAction("save")} disabled={schedBusy !== null} className="btn-secondary">
-                {schedBusy === "save" && <SpinnerIcon />} Save schedule
+                {schedBusy === "save" && <SpinnerIcon />} Save schedule settings
               </button>
               {savedEnabled && (
                 <>

@@ -211,7 +211,7 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
       <>
         {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-40 bg-ink/30 md:hidden" onClick={() => setMobileOpen(false)} />}
         <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-r border-line bg-white px-3 py-5 transition-[width,transform] duration-200 ${collapsed ? "app-sidebar-collapsed" : ""} ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-          <Link href="/" className={`flex h-10 shrink-0 items-center gap-3 px-2 ${collapsed ? "mb-8 justify-center" : ""}`} aria-label="Outbox home">
+          <Link href="/" className={`mb-4 flex h-10 shrink-0 items-center gap-3 px-2 ${collapsed ? "mb-8 justify-center" : ""}`} aria-label="Outbox home">
             <Logo className={`shrink-0 ${collapsed ? "h-6 w-8" : "h-9 w-20"}`} />
             {!collapsed && <span className="font-brand text-2xl font-semibold tracking-wide text-ink">Outbox</span>}
           </Link>

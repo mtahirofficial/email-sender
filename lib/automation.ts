@@ -19,6 +19,10 @@ export type OutreachSettings = {
   extra_cols?: ExtraColumn[]; // optional extra columns whose values the AI may use
   prompt: string;
   ai_notes?: string;
+  auto_follow_up_ai_notes?: string;
+  auto_follow_up?: boolean;
+  follow_up_after_days?: number;
+  max_follow_ups?: number;
   timezone: string;
   schedule_enabled: boolean;
   schedule_time: string; // HH:MM in `timezone`
