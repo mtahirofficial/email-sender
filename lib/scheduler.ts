@@ -51,7 +51,7 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
       .in("to_email", [...new Set(emails)]).not("thread_id", "is", null).limit(100);
     const due = (conversations ?? []).filter((conversation) =>
       isFollowUpDue({
-        status: String(conversation.status ?? "waiting"),
+        status: "waiting",
         follow_up_count: Number(conversation.follow_up_count ?? 0),
         sent_at: String(conversation.sent_at),
         last_follow_up_at: conversation.last_follow_up_at as string | null,
