@@ -53,9 +53,9 @@ const WINDOW_DAYS = 45; // conversations older than this are not tracked
 /** Updates a conversation. If the optional reply_unseen column does not exist yet, the rest is still saved. */
 async function updateConversation(supabase: SupabaseClient, id: string, patch: Record<string, unknown>) {
   const { error } = await supabase.from("conversations").update(patch).eq("id", id);
-  if (error && /reply_unseen/i.test(error.message ?? "")) {
-    const { reply_unseen: _ignored, ...rest } = patch;
-    void _ignored;
+  if (error && /reply_unseen|auto_follow_up_claimed_at|auto_follow_up_sending_at/i.test(error.message ?? "")) {
+    const { reply_unseen: _replyIgnored, auto_follow_up_claimed_at: _claimIgnored, auto_follow_up_sending_at: _sendingIgnored, ...rest } = patch;
+    void _replyIgnored; void _claimIgnored; void _sendingIgnored;
     await supabase.from("conversations").update(rest).eq("id", id);
   }
 }
@@ -65,6 +65,15 @@ async function updateConversation(supabase: SupabaseClient, id: string, patch: R
 export async function getInboxSettings(supabase: SupabaseClient, userId: string): Promise<InboxSettings> {
   const { data } = await supabase.from("inbox_settings").select("follow_up_after_days, max_follow_ups, instructions, last_sync_at").eq("user_id", userId).maybeSingle();
   return { ...DEFAULTS, ...(data ?? {}) } as InboxSettings;
+}
+
+export function isFollowUpDue(
+  conversation: { status: string; follow_up_count: number; sent_at: string; last_follow_up_at?: string | null },
+  settings: Pick<InboxSettings, "follow_up_after_days" | "max_follow_ups">,
+  now = Date.now()
+) {
+  return conversation.status === "waiting" && conversation.follow_up_count < settings.max_follow_ups &&
+    now - Date.parse(conversation.last_follow_up_at ?? conversation.sent_at) >= settings.follow_up_after_days * DAY;
 }
 
 export async function saveInboxSettings(supabase: SupabaseClient, userId: string, input: Partial<InboxSettings>) {
@@ -102,30 +111,17 @@ export async function listInbox(supabase: SupabaseClient, userId: string) {
   if (result.error) throw result.error;
   const data = (result.data ?? []) as unknown as Record<string, any>[];
 
-  // Keep automatically managed sheet contacts out of the manual follow-up queue.
-  // If the automation migration has not been applied, Inbox remains usable as before.
-  const { data: automatedSheets, error: automationError } = await supabase.from("outreach_settings")
-    .select("spreadsheet_id").eq("user_id", userId).eq("auto_follow_up", true);
-  const autoManaged = new Set<string>();
-  if (!automationError && automatedSheets?.length) {
-    const { data: automatedSends } = await supabase.from("outreach_sends")
-      .select("account_id, email").eq("user_id", userId)
-      .in("spreadsheet_id", automatedSheets.map((sheet) => sheet.spreadsheet_id));
-    for (const send of automatedSends ?? []) {
-      if (send.account_id && send.email) autoManaged.add(`${send.account_id}::${String(send.email).toLowerCase()}`);
-    }
-  }
-
   const now = Date.now();
   const items = data.map((c) => ({
     ...c,
     reply_unseen: Boolean(c.reply_unseen),
     followUpSending: Boolean(c.auto_follow_up_sending_at && Date.now() - Date.parse(c.auto_follow_up_sending_at) >= 0 && Date.now() - Date.parse(c.auto_follow_up_sending_at) < 10 * 60_000),
-    followUpDue:
-      !autoManaged.has(`${c.account_id}::${String(c.to_email).toLowerCase()}`) &&
-      c.status === "waiting" &&
-      c.follow_up_count < settings.max_follow_ups &&
-      now - Date.parse((c.last_follow_up_at as string | null) ?? (c.sent_at as string)) >= settings.follow_up_after_days * DAY,
+    followUpDue: isFollowUpDue({
+      status: c.status,
+      follow_up_count: Number(c.follow_up_count ?? 0),
+      sent_at: String(c.sent_at),
+      last_follow_up_at: c.last_follow_up_at as string | null,
+    }, settings, now),
   }));
   return { settings, accounts, items };
 }
@@ -394,7 +390,7 @@ export async function sendConversation(supabase: SupabaseClient, userId: string,
     const patch =
       kind === "reply"
         ? { status: "answered", reply_unseen: false, last_checked_at: new Date().toISOString() }
-        : { follow_up_count: conv.follow_up_count + 1, last_follow_up_at: new Date().toISOString(), last_checked_at: new Date().toISOString() };
+        : { follow_up_count: conv.follow_up_count + 1, last_follow_up_at: new Date().toISOString(), last_checked_at: new Date().toISOString(), auto_follow_up_claimed_at: null, auto_follow_up_sending_at: null };
     await updateConversation(supabase, conv.id, patch);
   }
   return { sentTo: to };

@@ -4,7 +4,7 @@ import { aiErrorMessage, generateEmails, isAiConfigured } from "@/lib/ai";
 import { addAiUsage, getAiAccess } from "@/lib/ai-usage";
 import { logEmailAttempt } from "@/lib/email-logs";
 import { listConnectedAccounts } from "@/lib/accounts";
-import { sendAutomaticFollowUp, syncInbox } from "@/lib/inbox";
+import { getInboxSettings, isFollowUpDue, sendAutomaticFollowUp, syncInbox } from "@/lib/inbox";
 import {
   assignItems, computePending, getSettings, getSheetsAccess, highlightSentToday, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount,
   type OutreachSettings,
@@ -23,6 +23,7 @@ const AI_BATCH = 8;
 async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSettings) {
   if (!settings.auto_follow_up) return 0;
   await syncInbox(admin, settings.user_id, true);
+  const inboxSettings = await getInboxSettings(admin, settings.user_id);
   const senders = await listSenders(admin, settings.user_id, settings.id);
   const gmailAccounts = new Set((await listConnectedAccounts(admin, settings.user_id))
     .filter((account) => account.provider === "google" && account.inbox_enabled && senders.some((sender) => sender.enabled && sender.accountId === account.id))
@@ -49,8 +50,12 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
       .eq("user_id", settings.user_id).eq("account_id", accountId).eq("status", "waiting")
       .in("to_email", [...new Set(emails)]).not("thread_id", "is", null).limit(100);
     const due = (conversations ?? []).filter((conversation) =>
-      Number(conversation.follow_up_count ?? 0) < (settings.max_follow_ups ?? 2) &&
-      nowMs - Date.parse(String(conversation.last_follow_up_at ?? conversation.sent_at)) >= (settings.follow_up_after_days ?? 4) * 86_400_000
+      isFollowUpDue({
+        status: String(conversation.status ?? "waiting"),
+        follow_up_count: Number(conversation.follow_up_count ?? 0),
+        sent_at: String(conversation.sent_at),
+        last_follow_up_at: conversation.last_follow_up_at as string | null,
+      }, inboxSettings, nowMs)
     ).sort((a, b) => Date.parse(String(a.sent_at)) - Date.parse(String(b.sent_at)));
     // Give each newly due message a persisted send time. The initial time is
     // randomized across the 12 hours after the configured waiting period, then
@@ -64,7 +69,7 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
       if (processed >= 5) break;
       let scheduledAt = conversation.auto_follow_up_claimed_at as string | null;
       if (!scheduledAt) {
-        const baseDue = Date.parse(String(conversation.last_follow_up_at ?? conversation.sent_at)) + (settings.follow_up_after_days ?? 4) * 86_400_000;
+        const baseDue = Date.parse(String(conversation.last_follow_up_at ?? conversation.sent_at)) + inboxSettings.follow_up_after_days * 86_400_000;
         const desiredSlot = baseDue + Math.floor(Math.random() * 12 * 60 * 60_000);
         const slot = Math.max(desiredSlot, nextSlot);
         nextSlot = slot + randomGap();
@@ -85,7 +90,7 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
       }
       if (!claim.data?.length) continue;
       try {
-        await sendAutomaticFollowUp(admin, settings.user_id, String(conversation.id), settings.auto_follow_up_ai_notes ?? "", settings.max_follow_ups ?? 2);
+        await sendAutomaticFollowUp(admin, settings.user_id, String(conversation.id), settings.auto_follow_up_ai_notes ?? "", inboxSettings.max_follow_ups);
         await admin.from("conversations").update({ auto_follow_up_claimed_at: null, auto_follow_up_sending_at: null }).eq("id", conversation.id);
         processed++;
         // Let a later scheduler tick pick the next message; sending multiple
