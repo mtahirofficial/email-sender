@@ -56,8 +56,8 @@ const nextConfig = {
 
 module.exports = (phase) => ({
   ...nextConfig,
-  // Isolate dev and production output so either can run without locking the other.
-  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
+  // Keep dev, production builds, and the production server on their own output directories.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next-build",
   // Avoid recursive cleanup hitting Windows' transient file locks on generated manifests.
   cleanDistDir: process.platform !== "win32",
   experimental: {

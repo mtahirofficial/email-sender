@@ -101,17 +101,16 @@ export default function SettingsForm({ user }: { user: HeaderUser }) {
     const { error } = await supabase.auth.updateUser({ password });
     setSavingPw(false);
     if (error) return setPwNotice({ ok: false, text: error.message });
-    setPassword("");
-    setConfirm("");
-    setPwNotice({ ok: true, text: "Password updated." });
+    await fetch("/api/auth/password-changed", { method: "POST" }).catch(() => undefined);
+    await supabase.auth.signOut();
+    router.replace("/login?password=updated");
+    router.refresh();
   }
 
   async function sendResetLink() {
     setPwNotice(null);
-    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/settings`,
-    });
-    setPwNotice(error ? { ok: false, text: error.message } : { ok: true, text: `Reset link sent to ${user.email}.` });
+    const response = await fetch("/api/auth/recovery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: user.email }) });
+    setPwNotice(response.ok ? { ok: true, text: `If an account uses ${user.email}, a reset email is on its way.` } : { ok: false, text: "Could not send a reset email. Try again later." });
   }
 
   async function deleteAccount(e: React.FormEvent) {

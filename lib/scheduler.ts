@@ -288,8 +288,9 @@ export async function sendDue(admin: SupabaseClient, settings: OutreachSettings,
 export async function runTickForUser(admin: SupabaseClient, userId: string, opts: { force?: boolean; automationId?: string } = {}) {
   const settings = await getSettings(admin, userId, opts.automationId);
   if (!settings) return { prepared: 0, sent: 0, failed: 0, note: "Schedule is off." };
+  const followUpsAllowedToday = sendsOnWeekday(settings, localNow(settings.timezone).weekday);
   if (!settings.schedule_enabled) {
-    const followUps = await sendDueFollowUps(admin, settings);
+    const followUps = followUpsAllowedToday ? await sendDueFollowUps(admin, settings) : 0;
     return { prepared: 0, sent: followUps, failed: 0, note: "Schedule is off." };
   }
 
@@ -337,7 +338,7 @@ export async function runTickForUser(admin: SupabaseClient, userId: string, opts
   }
 
   const { sent, failed } = await sendDue(admin, settings);
-  const followUps = await sendDueFollowUps(admin, settings);
+  const followUps = followUpsAllowedToday ? await sendDueFollowUps(admin, settings) : 0;
   return { prepared, sent: sent + followUps, failed, note };
 }
 
