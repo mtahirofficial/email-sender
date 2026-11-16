@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
 const nextCli = join(root, "node_modules", "next", "dist", "bin", "next");
+const buildDir = join(root, ".next");
 const maxAttempts = 3;
 
 function run(command, args) {
@@ -28,7 +30,13 @@ function run(command, args) {
 let build;
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
   build = await run(process.execPath, [nextCli, "build", "--webpack"]);
-  if (build.code === 0) break;
+  if (build.code === 0) {
+    if (!existsSync(buildDir)) {
+      console.error(`Next.js build succeeded but output directory is missing: ${buildDir}`);
+      process.exit(1);
+    }
+    break;
+  }
   if (!build.retryable || attempt === maxAttempts) {
     if (build.error) console.error(build.error);
     process.exitCode = build.code;

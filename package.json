@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/build.mjs",
-    "start": "node .next-build/standalone/server.js",
+    "start": "node scripts/start.mjs",
     "lint": "eslint .",
     "test:automation-render": "node scripts/check-automation-editor-render.cjs"
   },
