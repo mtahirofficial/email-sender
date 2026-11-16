@@ -28,9 +28,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<{ type: "error" | "info"; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("expired")) {
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("password") === "updated") {
+      setStatus({ type: "info", message: "Your password has been updated. Sign in with your new password." });
+    } else if (query.get("expired")) {
       setStatus({ type: "info", message: "Your session ended. Please sign in again." });
     }
   }, []);
@@ -50,22 +54,41 @@ export default function LoginPage() {
       router.push(nextPath());
       router.refresh();
     } else {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      const response = await fetch("/api/auth/signup", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
+      const result = await response.json().catch(() => ({}));
       setLoading(false);
-      if (error) {
-        setStatus({ type: "error", message: error.message });
+      if (!response.ok) {
+        setStatus({ type: "error", message: result.error ?? "Could not create your account." });
         return;
       }
       setStatus({
         type: "info",
-        message: "Check your inbox to confirm your address, then sign in.",
+        message: "We sent a confirmation email. Follow its link or enter the security code below.",
       });
-      setMode("sign_in");
+      setAwaitingConfirmation(true);
     }
+  }
+
+  async function confirmSignup(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const token = new FormData(e.currentTarget).get("signup-code");
+    setLoading(true);
+    setStatus(null);
+    const response = await fetch("/api/auth/verify-signup", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, token }),
+    });
+    const result = await response.json().catch(() => ({}));
+    setLoading(false);
+    if (!response.ok) {
+      setStatus({ type: "error", message: result.error ?? "Could not verify that code." });
+      return;
+    }
+    router.push("/compose");
+    router.refresh();
   }
 
   const isSignIn = mode === "sign_in";
@@ -170,6 +193,8 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {isSignIn && <div className="-mt-2 text-right"><Link href="/forgot-password" className="text-sm font-medium text-accent-deep underline underline-offset-2">Forgot password?</Link></div>}
+
               <div aria-live="polite">
                 {status && (
                   <p
@@ -195,6 +220,11 @@ export default function LoginPage() {
                 {loading ? "Please wait…" : isSignIn ? "Sign in" : "Create account"}
               </button>
             </form>
+            {awaitingConfirmation && <form onSubmit={confirmSignup} className="mt-5 space-y-3 border-t border-line pt-5">
+              <label htmlFor="signup-code" className="label">Email confirmation code</label>
+              <input id="signup-code" name="signup-code" inputMode="numeric" autoComplete="one-time-code" required className="input" placeholder="Enter the code from your email" />
+              <button type="submit" disabled={loading} className="btn-secondary w-full">{loading && <SpinnerIcon />}Confirm email</button>
+            </form>}
           </div>
 
           <p className="mt-6 text-xs leading-relaxed text-ink-soft">

@@ -68,6 +68,11 @@ setup and usage.
      production equivalent later)
 5. (Optional) Under **Authentication → Providers → Email**, you can disable
    "Confirm email" during local testing to skip the confirmation step.
+6. Add these server-only environment variables to `.env.local` and your hosting
+   environment to send branded signup, welcome, recovery, and password-change emails
+   through your SMTP provider: `SMTP_HOST`, `SMTP_PORT` (587, or 465 for implicit TLS),
+   `SMTP_USER`, `SMTP_PASS`, and `AUTH_EMAIL_FROM` (for example, `Outbox <hello@yourdomain.com>`).
+   App-generated confirmation and recovery links/codes do not use Supabase's email sender.
 
 ## 2. Set up Google OAuth (for "Connect Gmail")
 
