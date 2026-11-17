@@ -653,7 +653,7 @@ function Conversation({
 
   return (
     <div className="inbox-conversation-shell" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={`Conversation with ${item.to_email}`} className="relative flex h-full w-full max-w-2xl flex-col border-l border-line bg-surface text-ink shadow-lift">
+      <div role="dialog" aria-modal="true" aria-label={`Conversation with ${item.to_email}`} className="relative flex h-full w-full max-w-4xl flex-col border-l border-line bg-surface text-ink shadow-lift">
         <div className="flex min-h-11 min-w-0 items-center gap-2 border-b border-line px-3 py-1.5 sm:gap-3 sm:px-5">
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
             <p className="max-w-[52%] shrink truncate font-semibold text-ink" title={item.to_email}>{item.to_email}</p>
