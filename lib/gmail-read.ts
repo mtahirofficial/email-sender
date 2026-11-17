@@ -93,7 +93,29 @@ function htmlToText(html: string) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
+type Part = { partId?: string; mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string; size?: number }; parts?: Part[] };
+
+export type ThreadAttachment = { id: string; filename: string; mimeType: string; size: number; inlineData?: string };
+
+function collectAttachments(part: Part, out: ThreadAttachment[], withData = false) {
+  if (part.filename?.trim() && (part.body?.attachmentId || part.body?.data) && part.partId) {
+    out.push({
+      id: part.body.attachmentId || part.partId,
+      filename: decodeMimeWords(part.filename),
+      mimeType: part.mimeType || "application/octet-stream",
+      size: Number(part.body.size ?? 0),
+      ...(withData && part.body.data ? { inlineData: part.body.data } : {}),
+    });
+  }
+  for (const child of part.parts ?? []) collectAttachments(child, out, withData);
+}
+
+function attachmentList(payload?: Part, withData = false): ThreadAttachment[] {
+  if (!payload) return [];
+  const out: ThreadAttachment[] = [];
+  collectAttachments(payload, out, withData);
+  return out;
+}
 
 function collect(part: Part, kind: "text/plain" | "text/html", out: string[]) {
   if (part.mimeType === kind && part.body?.data) out.push(fromBase64Url(part.body.data));
@@ -145,11 +167,12 @@ export type ThreadMessage = {
   messageId: string; // the Message-ID header, used to reply inside the same conversation
   references: string;
   text?: string;
+  attachments?: ThreadAttachment[];
 };
 
 type RawMessage = { id: string; labelIds?: string[]; snippet?: string; internalDate?: string; payload?: Part & { headers?: { name: string; value: string }[] } };
 
-function toMessage(raw: RawMessage, withText: boolean): ThreadMessage {
+function toMessage(raw: RawMessage, withText: boolean, withAttachmentData = false): ThreadMessage {
   const h = (name: string) => raw.payload?.headers?.find((x) => x.name.toLowerCase() === name.toLowerCase())?.value ?? "";
   return {
     id: raw.id,
@@ -161,7 +184,7 @@ function toMessage(raw: RawMessage, withText: boolean): ThreadMessage {
     subject: decodeMimeWords(h("Subject")),
     messageId: h("Message-ID") || h("Message-Id"),
     references: h("References"),
-    ...(withText && raw.payload ? { text: stripQuoted(messageText(raw.payload)) } : {}),
+    ...(withText && raw.payload ? { text: stripQuoted(messageText(raw.payload)), attachments: attachmentList(raw.payload, withAttachmentData) } : {}),
   };
 }
 
@@ -199,9 +222,9 @@ export async function getThreadMeta(accessToken: string, threadId: string): Prom
   return ((data.messages ?? []) as RawMessage[]).map((m) => toMessage(m, false)).sort((a, b) => a.at - b.at);
 }
 
-export async function getThreadFull(accessToken: string, threadId: string): Promise<ThreadMessage[]> {
+export async function getThreadFull(accessToken: string, threadId: string, withAttachmentData = false): Promise<ThreadMessage[]> {
   const data = await gmailGet(accessToken, `/threads/${encodeURIComponent(threadId)}?format=full&fields=messages(id,labelIds,snippet,internalDate,payload)`);
-  return ((data.messages ?? []) as RawMessage[]).map((m) => toMessage(m, true)).sort((a, b) => a.at - b.at);
+  return ((data.messages ?? []) as RawMessage[]).map((m) => toMessage(m, true, withAttachmentData)).sort((a, b) => a.at - b.at);
 }
 
 // ---- what happened in a conversation ---------------------------------------
@@ -233,7 +256,7 @@ export function analyzeThread(messages: ThreadMessage[], accountEmail: string): 
 
 // ---- the whole inbox, one page at a time -------------------------------------
 
-export type MailListItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean };
+export type MailListItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean; attachmentCount: number };
 
 export const INBOX_PAGE_SIZE = 50;
 
@@ -251,7 +274,7 @@ export async function listInboxPage(accessToken: string, opts: { pageToken?: str
   const list = await gmailGet(accessToken, `/messages?${params.join("&")}`);
   const ids: { id: string; threadId: string }[] = list.messages ?? [];
 
-  const detail = "format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=In-Reply-To&fields=id,threadId,labelIds,snippet,internalDate,payload/headers";
+  const detail = "format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=In-Reply-To&fields=id,threadId,labelIds,snippet,internalDate,payload";
   const found: (MailListItem | null)[] = new Array(ids.length).fill(null);
   let next = 0;
   await Promise.all(
@@ -272,6 +295,7 @@ export async function listInboxPage(accessToken: string, opts: { pageToken?: str
             unread: (raw.labelIds ?? []).includes("UNREAD"),
             starred: (raw.labelIds ?? []).includes("STARRED"),
             isReply: Boolean(h("In-Reply-To")) || /^\s*re:/i.test(subject),
+            attachmentCount: attachmentList(raw.payload).length,
           };
         } catch (err) {
           if (err instanceof GoogleReadScopeError) throw err;
@@ -311,4 +335,43 @@ export function markThreadRead(accessToken: string, threadId: string) {
 
 export function setMessageStarred(accessToken: string, messageId: string, starred: boolean) {
   return gmailModify(accessToken, `/messages/${encodeURIComponent(messageId)}/modify`, starred ? { addLabelIds: ["STARRED"] } : { removeLabelIds: ["STARRED"] });
+}
+
+/** Downloads an attachment only after confirming its ID belongs to the requested message in its Gmail thread. */
+export async function getMessageAttachment(
+  accessToken: string,
+  threadId: string,
+  messageId: string,
+  attachmentId: string,
+  fallback: Pick<ThreadAttachment, "filename" | "mimeType" | "size">
+) {
+  // Gmail IDs are opaque. Keep path separators/control characters out, but do not
+  // assume they only contain base64url characters (some include padding/punctuation).
+  const validId = (value: string) => value.length > 0 && value.length <= 500 && /^[A-Za-z0-9._~+=-]+$/.test(value) && value !== "." && value !== "..";
+  if (!validId(messageId) || !validId(attachmentId)) {
+    throw new GmailApiError(400, "Invalid attachment reference");
+  }
+  if (!validId(threadId)) throw new GmailApiError(400, "Invalid Gmail thread reference");
+
+  // Ask Gmail for external attachment data directly first. This API validates
+  // that the ID belongs to this message and avoids relying on reconstructed MIME metadata.
+  try {
+    const data = await gmailGet(accessToken, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`);
+    return {
+      attachment: { id: attachmentId, ...fallback },
+      bytes: Buffer.from(String(data.data ?? "").replace(/-/g, "+").replace(/_/g, "/"), "base64"),
+    };
+  } catch (err) {
+    if (!(err instanceof GmailApiError) || err.status !== 404) throw err;
+  }
+
+  // Small inline MIME parts have body data and no separate attachment resource.
+  const messages = await getThreadFull(accessToken, threadId, true);
+  const attachment = messages.find((message) => message.id === messageId)?.attachments?.find((item) => item.id === attachmentId);
+  if (!attachment) throw new GmailApiError(404, "Attachment not found in this Gmail thread");
+  if (attachment.inlineData) {
+    const { inlineData, ...metadata } = attachment;
+    return { attachment: metadata, bytes: Buffer.from(inlineData.replace(/-/g, "+").replace(/_/g, "/"), "base64") };
+  }
+  throw new GmailApiError(404, "Gmail could not find this attachment in the selected message");
 }

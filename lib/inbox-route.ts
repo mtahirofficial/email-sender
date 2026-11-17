@@ -19,7 +19,8 @@ export async function inboxRoute(fn: (ctx: { supabase: SupabaseClient; user: Use
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
   try {
-    return NextResponse.json(await fn({ supabase, user }));
+    const result = await fn({ supabase, user });
+    return result instanceof Response ? result : NextResponse.json(result);
   } catch (err) {
     if (err instanceof InboxError) return NextResponse.json({ error: err.message, ...err.extra }, { status: err.status });
     if (err instanceof GoogleModifyScopeError) {
@@ -40,7 +41,11 @@ export async function inboxRoute(fn: (ctx: { supabase: SupabaseClient; user: Use
       return NextResponse.json({ error: "The database isn't ready for the Inbox yet. Run supabase/migrations_add_inbox.sql in the Supabase SQL Editor.", setup: true }, { status: 503 });
     }
     console.error("inbox: request failed", err);
-    if (err instanceof GmailApiError) return NextResponse.json({ error: "Gmail did not answer. Please try again in a minute." }, { status: 502 });
+    if (err instanceof GmailApiError) {
+      if (err.status === 400) return NextResponse.json({ error: "This attachment link is invalid. Refresh the message and try again." }, { status: 400 });
+      if (err.status === 404) return NextResponse.json({ error: "Gmail could not find this attachment. Refresh the message and try again." }, { status: 404 });
+      return NextResponse.json({ error: "Gmail could not open this attachment. Please try again." }, { status: 502 });
+    }
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

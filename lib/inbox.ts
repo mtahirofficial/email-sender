@@ -8,6 +8,7 @@ import {
   addressOf,
   analyzeThread,
   findOutreachThread,
+  getMessageAttachment,
   getThreadFull,
   getThreadMeta,
   listInboxPage,
@@ -287,6 +288,23 @@ export async function listMailPage(supabase: SupabaseClient, userId: string, acc
   return listInboxPage(accessToken, opts);
 }
 
+export async function downloadInboxAttachment(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+  threadId: string,
+  messageId: string,
+  attachmentId: string,
+  fallback: { filename: string; mimeType: string; size: number }
+) {
+  const accounts = await listConnectedAccounts(supabase, userId);
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account || account.provider !== "google") throw new InboxError("Choose a Gmail account.", 400);
+  if (!account.inbox_enabled) throw new InboxError("Allow Outbox to manage this Gmail inbox first.", 409, { needsPermission: true });
+  const { accessToken } = await getValidAccessToken(supabase, userId, accountId);
+  return getMessageAttachment(accessToken, threadId, messageId, attachmentId, fallback);
+}
+
 export async function updateInboxMail(supabase: SupabaseClient, userId: string, input: { account: string; threadId: string; messageId?: string; action: "mark-read" | "star" | "unstar" }) {
   if (!/^[0-9a-fA-F-]{36}$/.test(input.account) || !/^[A-Za-z0-9_-]{6,64}$/.test(input.threadId)) throw new InboxError("Choose a message first.", 400);
   if (input.action !== "mark-read" && (!input.messageId || !/^[A-Za-z0-9_-]{6,64}$/.test(input.messageId))) throw new InboxError("Choose a message first.", 400);
@@ -308,7 +326,7 @@ export async function openThread(supabase: SupabaseClient, userId: string, input
   return {
     from: ctx.email,
     threadId: target.threadId,
-    messages: messages.map((m) => ({ id: m.id, from: m.from, fromMe: isMine(m, ctx.email), at: m.at, text: m.text || m.snippet, unread: m.labelIds.includes("UNREAD"), starred: m.labelIds.includes("STARRED") })),
+    messages: messages.map((m) => ({ id: m.id, from: m.from, fromMe: isMine(m, ctx.email), at: m.at, text: m.text || m.snippet, unread: m.labelIds.includes("UNREAD"), starred: m.labelIds.includes("STARRED"), attachments: m.attachments ?? [] })),
   };
 }
 

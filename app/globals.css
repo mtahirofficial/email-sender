@@ -193,6 +193,28 @@ html[data-theme="dark"] .shadow-lift {
   width: 76px;
 }
 
+/* Inbox conversations stay inside the workspace area, below the top bar and
+   beside the persistent navigation instead of covering the app chrome. */
+.inbox-conversation-shell {
+  position: fixed;
+  inset: 68px 0 0 252px;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(var(--ink) / 0.18);
+}
+
+body:has(.app-sidebar-collapsed) .inbox-conversation-shell {
+  left: 76px;
+}
+
+@media (max-width: 767px) {
+  .inbox-conversation-shell,
+  body:has(.app-sidebar-collapsed) .inbox-conversation-shell {
+    left: 0;
+  }
+}
+
 body:has(.app-sidebar) main#main {
   box-sizing: border-box;
   width: calc(100% - 252px);

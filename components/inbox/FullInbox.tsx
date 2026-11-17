@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertIcon, MarkReadIcon, SpinnerIcon, StarIcon } from "@/components/icons";
+import { AlertIcon, MarkReadIcon, PaperclipIcon, SpinnerIcon, StarIcon } from "@/components/icons";
 
-export type MailItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean };
+export type MailItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean; attachmentCount: number };
 
 /** "Ann Lee <ann@x.com>" -> "Ann Lee" (or the address when there is no name) */
 export const senderName = (from: string) => from.replace(/<[^>]*>/, "").replace(/^["'\s]+|["'\s]+$/g, "") || from;
@@ -173,7 +173,10 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
                   {m.isReply && <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-deep">Reply</span>}
                   <span className="shrink-0 text-xs text-ink-soft">{when(m.at)}</span>
                 </div>
-                <p className={`truncate text-sm ${m.unread ? "font-medium text-ink" : "text-ink-soft"}`}>{m.subject || "(no subject)"}</p>
+                <p className={`flex min-w-0 items-center gap-1 truncate text-sm ${m.unread ? "font-medium text-ink" : "text-ink-soft"}`}>
+                  <span className="truncate">{m.subject || "(no subject)"}</span>
+                  {m.attachmentCount > 0 && <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-accent/20 bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent-deep" aria-label={`${m.attachmentCount} attachment${m.attachmentCount === 1 ? "" : "s"}`} title={`${m.attachmentCount} attachment${m.attachmentCount === 1 ? "" : "s"}`}><PaperclipIcon />{m.attachmentCount > 1 ? m.attachmentCount : null}</span>}
+                </p>
                 <p className="truncate text-xs text-ink-soft">{m.snippet}</p>
               </button>
               <div className="flex shrink-0 items-center">

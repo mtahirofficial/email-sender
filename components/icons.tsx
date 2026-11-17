@@ -26,6 +26,11 @@ export const MailIcon = ({ className }: IconProps) => (
     <path d="m4 7.5 8 6 8-6" />
   </Svg>
 );
+export const PaperclipIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <path d="m8 12.5 6.1-6.1a2.75 2.75 0 0 1 3.9 3.9l-7.7 7.7a4.75 4.75 0 0 1-6.7-6.7l7.2-7.2" />
+  </Svg>
+);
 export const SendIcon = ({ className }: IconProps) => (
   <Svg className={className}>
     <path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7z" />

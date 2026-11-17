@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import AiStatusNote from "@/components/AiStatusNote";
-import { AlertIcon, CheckIcon, MarkReadIcon, SparkleIcon, SpinnerIcon, StarIcon, XIcon } from "@/components/icons";
+import { AlertIcon, CheckIcon, InfoIcon, MarkReadIcon, PaperclipIcon, SparkleIcon, SpinnerIcon, StarIcon, XIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
 import { useScrollLock } from "@/components/useScrollLock";
 import FullInbox, { senderAddress, type MailItem } from "@/components/inbox/FullInbox";
@@ -30,7 +29,8 @@ type Item = {
 type Account = { id: string; email: string; provider: string; inbox_enabled: boolean; sheets_enabled: boolean };
 type Settings = { follow_up_after_days: number; max_follow_ups: number; instructions: string; last_sync_at: string | null };
 type Data = { settings: Settings; accounts: Account[]; items: Item[] };
-type Message = { id: string; from: string; fromMe: boolean; at: number; text: string; unread: boolean; starred: boolean };
+type Attachment = { id: string; filename: string; mimeType: string; size: number };
+type Message = { id: string; from: string; fromMe: boolean; at: number; text: string; unread: boolean; starred: boolean; attachments: Attachment[] };
 type Draft = { body: string; summary?: string; intent?: string; needsReply?: boolean };
 type Tab = "replies" | "followup" | "waiting" | "done" | "all";
 
@@ -76,6 +76,11 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 const post = <T,>(url: string, body: unknown) => call<T>(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+function attachmentSize(size: number) {
+  if (!size) return "";
+  return size < 1_000_000 ? `${Math.max(1, Math.round(size / 1000))} KB` : `${(size / 1_000_000).toFixed(1)} MB`;
+}
 
 function formattedEmailText(source: string) {
   const tokens = /\[image:\s*([^\]]+)\]\s*<(https?:\/\/[^>\s]+)>|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|<(https?:\/\/[^>\s]+)>|(https?:\/\/[^\s<>]+)|\b([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})\b|\*([^*\n]+)\*|_([^_\n]+)_/gi;
@@ -126,6 +131,19 @@ function FormattedEmail({ text }: { text: string }) {
         <p key={index} className="whitespace-pre-wrap">{formattedEmailText(paragraph)}</p>
       ))}
     </div>
+  );
+}
+
+function ReplyInfoTip({ className = "", floating = false }: { className?: string; floating?: boolean }) {
+  return (
+    <span className={`group inline-flex ${floating ? "" : "relative"} ${className}`}>
+      <button type="button" aria-label="About AI drafted replies" className="grid h-8 w-8 place-items-center rounded-full text-ink-soft transition-colors hover:bg-mist hover:text-accent-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">
+        <InfoIcon className="h-4 w-4" />
+      </button>
+      <span role="tooltip" className="pointer-events-none invisible absolute bottom-full right-0 z-40 mb-2 w-64 rounded-lg bg-ink px-3 py-2 text-xs leading-relaxed text-paper opacity-0 shadow-lift transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+        The AI only suggests. Read and change the text, then press Send. It goes out inside the same conversation.
+      </span>
+    </span>
   );
 }
 
@@ -437,9 +455,6 @@ export default function InboxPanel() {
                 </li>
               ))}
             </ul>
-            <div className="mt-3">
-              <AiStatusNote />
-            </div>
           </div>
         )}
       </div>
@@ -477,6 +492,7 @@ function AutoTextarea({
   placeholder,
   maxLength,
   maxLines = 4,
+  className = "",
 }: {
   id: string;
   value: string;
@@ -484,6 +500,7 @@ function AutoTextarea({
   placeholder?: string;
   maxLength?: number;
   maxLines?: number;
+  className?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -497,7 +514,7 @@ function AutoTextarea({
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
     el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
   }, [value, maxLines]);
-  return <textarea ref={ref} id={id} rows={1} value={value} onChange={onChange} placeholder={placeholder} maxLength={maxLength} className="input resize-none" />;
+  return <textarea ref={ref} id={id} rows={1} value={value} onChange={onChange} placeholder={placeholder} maxLength={maxLength} className={`input resize-none ${className}`} />;
 }
 
 function Conversation({
@@ -526,16 +543,27 @@ function Conversation({
   const [busy, setBusy] = useState<"" | "draft" | "send" | "status" | "mail-action">("");
   const [promptOpen, setPromptOpen] = useState(false);
   const [promptText, setPromptText] = useState("");
+  const [showDraftInfo, setShowDraftInfo] = useState(false);
+  const [downloadingAttachment, setDownloadingAttachment] = useState<string | null>(null);
+  const downloadResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A message opened from the full inbox is not an Outbox conversation: it is found by account + Gmail thread.
   const synthetic = item.id.startsWith("mail:");
   const target: Record<string, string> = synthetic ? { account: item.account_id, thread: item.id.split(":")[2] } : { id: item.id };
   const kind: "reply" | "followup" | null = item.status === "waiting" ? "followup" : item.status === "replied" || item.status === "answered" || (item.status === "closed" && Boolean(item.reply_at)) ? "reply" : null;
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (promptOpen) setPromptOpen(false);
+      else onClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, promptOpen]);
+
+  useEffect(() => () => {
+    if (downloadResetRef.current) clearTimeout(downloadResetRef.current);
+  }, []);
 
   useEffect(() => {
     // opening a conversation with a new reply clears its highlight
@@ -581,9 +609,11 @@ function Conversation({
       if (!instruction) setInfo(d.summary || d.intent ? { summary: d.summary, intent: d.intent } : null);
       if (d.needsReply === false) {
         setText("");
+        setShowDraftInfo(false);
         toast.info("This message does not need an answer. You can mark it done.");
       } else {
         setText(d.body);
+        setShowDraftInfo(!instruction.trim());
         onDraft({ body: d.body });
       }
       setPromptOpen(false); // the prompt box goes away and the message box shows the result
@@ -622,16 +652,16 @@ function Conversation({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={`Conversation with ${item.to_email}`} className="flex h-full w-full max-w-2xl flex-col bg-white shadow-lift">
-        <div className="flex min-w-0 items-start gap-2 border-b border-line px-3 py-3 sm:gap-3 sm:px-5 sm:py-4">
-          <div className="min-w-0 flex-1">
-            <p className="break-all font-semibold text-ink">{item.to_email}</p>
-            <p className="truncate text-sm text-ink-soft">{item.subject}</p>
+    <div className="inbox-conversation-shell" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={`Conversation with ${item.to_email}`} className="relative flex h-full w-full max-w-2xl flex-col border-l border-line bg-surface text-ink shadow-lift">
+        <div className="flex min-h-11 min-w-0 items-center gap-2 border-b border-line px-3 py-1.5 sm:gap-3 sm:px-5">
+          <div className="flex min-w-0 flex-1 items-baseline gap-2">
+            <p className="max-w-[52%] shrink truncate font-semibold text-ink" title={item.to_email}>{item.to_email}</p>
+            <p className="min-w-0 flex-1 truncate text-sm text-ink-soft" title={item.subject}>{item.subject}</p>
           </div>
-          {messages?.some((m) => m.unread) && <button type="button" onClick={() => void updateMail("mark-read")} disabled={busy !== ""} title="Mark thread as read" className="btn-ghost min-h-10 shrink-0 px-2 text-xs sm:px-3 sm:text-sm"><MarkReadIcon className="h-4 w-4" /><span className="hidden sm:inline">Mark read</span></button>}
-          <button type="button" onClick={onClose} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-mist">
-            <XIcon className="h-5 w-5" />
+          {messages?.some((m) => m.unread) && <button type="button" onClick={() => void updateMail("mark-read")} disabled={busy !== ""} title="Mark thread as read" className="btn-ghost min-h-8 shrink-0 px-2 text-xs sm:px-3"><MarkReadIcon className="h-4 w-4" /><span className="hidden sm:inline">Mark read</span></button>}
+          <button type="button" onClick={onClose} aria-label="Close" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-soft transition-colors hover:bg-mist hover:text-ink">
+            <XIcon className="h-4 w-4" />
           </button>
         </div>
 
@@ -658,6 +688,40 @@ function Conversation({
                 <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} title={m.starred ? "Remove star" : "Star message"} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} className={`rounded p-1 ${m.starred ? "text-amber-500" : "hover:text-amber-500"}`}><StarIcon className="h-4 w-4" /></button>
               </div>
               <FormattedEmail text={m.text} />
+              {m.attachments.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-current/10 pt-3">
+                  <p className="text-xs font-semibold opacity-75">Attachments ({m.attachments.length})</p>
+                  <div className="flex flex-wrap gap-2">
+                    {m.attachments.map((attachment) => {
+                      const params = new URLSearchParams({ account: item.account_id, thread: threadId ?? item.id.split(":")[2] ?? "", message: m.id, attachment: attachment.id, filename: attachment.filename, type: attachment.mimeType, size: String(attachment.size) });
+                      const attachmentUrl = `/api/inbox/attachment?${params}`;
+                      return (
+                        <div key={attachment.id} role="group" aria-label={`Attachment ${attachment.filename}`} tabIndex={0} className="group inline-flex max-w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink transition-colors hover:border-accent/50 hover:bg-accent-soft/60 focus-within:border-accent/50 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent">
+                          <PaperclipIcon className="h-4 w-4 shrink-0 text-accent-deep" />
+                          <span className="min-w-0 flex-1"><span className="block truncate font-medium text-ink group-hover:text-accent-deep">{attachment.filename}</span><span className="text-ink-soft">{attachmentSize(attachment.size) || attachment.mimeType}</span></span>
+                          <span className="flex shrink-0 items-center gap-1 [@media(hover:hover)]:hidden [@media(hover:hover)]:group-hover:flex [@media(hover:hover)]:group-focus-within:flex">
+                            <a href={`${attachmentUrl}&open=1`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${attachment.filename} in a new tab`} className="rounded-md px-2 py-1.5 font-medium text-accent-deep transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">Open</a>
+                            <a
+                              href={attachmentUrl}
+                              download={attachment.filename}
+                              aria-label={`Download ${attachment.filename}`}
+                              aria-busy={downloadingAttachment === attachment.id}
+                              onClick={() => {
+                                setDownloadingAttachment(attachment.id);
+                                if (downloadResetRef.current) clearTimeout(downloadResetRef.current);
+                                downloadResetRef.current = setTimeout(() => setDownloadingAttachment(null), 2500);
+                              }}
+                              className="inline-flex min-w-[74px] items-center justify-center gap-1 rounded-md px-2 py-1.5 font-medium text-ink-soft transition-colors hover:bg-mist hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                            >
+                              {downloadingAttachment === attachment.id ? <><SpinnerIcon className="h-3.5 w-3.5" /> Downloading</> : "Download"}
+                            </a>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {info && (info.summary || info.intent) && (
@@ -669,57 +733,37 @@ function Conversation({
         </div>
 
         <div className="space-y-3 border-t border-line px-3 py-3 sm:px-5 sm:py-4">
-          {kind && !promptOpen && (
+          {kind && (
             <>
-              <label htmlFor="draft-text" className="label">
-                {kind === "reply" ? "Your reply" : `Follow-up ${item.follow_up_count + 1}`}
-              </label>
-              <AutoTextarea
-                id="draft-text"
-                value={text}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  onDraft({ body: e.target.value });
-                }}
-                maxLength={5000}
-                placeholder={kind === "reply" ? "Write your reply, or let the AI suggest one." : "Write a follow-up, or let the AI suggest one."}
-              />
-              <p className="text-xs text-ink-soft">The AI only suggests. Read and change the text, then press Send. It goes out inside the same conversation.</p>
+              {kind === "followup" ? <label htmlFor="draft-text" className="label">Follow-up {item.follow_up_count + 1}</label> : <label htmlFor="draft-text" className="sr-only">Your reply</label>}
+              <div className="relative">
+                <AutoTextarea
+                  id="draft-text"
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    onDraft({ body: e.target.value });
+                  }}
+                  maxLength={5000}
+                  placeholder={kind === "reply" ? "Write your reply, or let the AI suggest one." : "Write a follow-up, or let the AI suggest one."}
+                  className={showDraftInfo ? "pr-12" : ""}
+                />
+                {showDraftInfo && <ReplyInfoTip floating className="absolute right-2 top-1" />}
+              </div>
             </>
-          )}
-          {kind && promptOpen && (
-            <div className="rounded-xl border border-line bg-mist p-3">
-              <label htmlFor="own-prompt" className="label">
-                Your prompt
-              </label>
-              <textarea
-                id="own-prompt"
-                value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
-                rows={3}
-                maxLength={1000}
-                placeholder={'Tell the AI what to say, for example: "Say yes, the price is $50, and ask for the page URL."'}
-                className="input"
-              />
-              <button
-                type="button"
-                onClick={() => writeDraft(promptText.trim())}
-                disabled={busy !== "" || !promptText.trim() || !messages}
-                className="btn-primary mt-2 min-h-[40px] px-3.5 text-sm"
-              >
-                {busy === "draft" && promptOpen ? <SpinnerIcon /> : <SparkleIcon className="h-4 w-4" />} Generate message
-              </button>
-              <p className="mt-2 text-xs text-ink-soft">The AI also reads the conversation, so you only need to say what you want to answer.</p>
-            </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
             {kind && (
               <>
                 <button type="button" onClick={() => writeDraft()} disabled={busy !== "" || !messages} className="btn-secondary min-h-[40px] px-3.5 text-sm">
-                  {busy === "draft" && !promptOpen ? <SpinnerIcon /> : null} {kind === "reply" ? "Understand and draft reply" : "Draft follow-up"}
+                  {busy === "draft" && !promptOpen ? <SpinnerIcon /> : null}
+                  <span className="lg:hidden">{kind === "reply" ? "Draft reply" : "Draft follow-up"}</span>
+                  <span className="hidden lg:inline">{kind === "reply" ? "Understand and draft reply" : "Draft follow-up"}</span>
                 </button>
                 <button type="button" onClick={() => setPromptOpen((v) => !v)} aria-expanded={promptOpen} className="btn-secondary min-h-[40px] px-3.5 text-sm">
-                  <SparkleIcon className="h-4 w-4" /> {promptOpen ? "Back to the message" : text.trim() ? "Regenerate with my prompt" : "Write with my prompt"}
+                  <SparkleIcon className="h-4 w-4" />
+                  <span className="lg:hidden">My prompt</span>
+                  <span className="hidden lg:inline">{text.trim() ? "Regenerate with my prompt" : "Write with my prompt"}</span>
                 </button>
                 <button type="button" onClick={send} disabled={busy !== "" || promptOpen || !text.trim()} className="btn-primary min-h-[40px] px-4 text-sm">
                   {busy === "send" ? <SpinnerIcon /> : <CheckIcon className="h-4 w-4" />} Send
@@ -731,12 +775,43 @@ function Conversation({
                 Reopen
               </button>
             ) : (
-              <button type="button" onClick={() => setStatus("close")} disabled={busy !== ""} className="btn-ghost ml-auto min-h-[40px] px-3 text-sm">
+              <button type="button" onClick={() => setStatus("close")} disabled={busy !== ""} className="btn-ghost ml-auto min-h-[40px] px-2 text-xs sm:px-3 sm:text-sm">
                 Mark done
               </button>
             )}
           </div>
-          <AiStatusNote />
+
+        {promptOpen && kind && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && setPromptOpen(false)}>
+            <section role="dialog" aria-modal="true" aria-labelledby="own-prompt-title" className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 text-ink shadow-lift sm:p-6" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 id="own-prompt-title" className="font-serif text-xl">Write with your prompt</h2>
+                  <p className="mt-1 text-sm text-ink-soft">Tell the AI what you want to say. It will use the conversation for context.</p>
+                </div>
+                <ReplyInfoTip className="mt-0.5" />
+                <button type="button" onClick={() => setPromptOpen(false)} aria-label="Close prompt" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-soft transition-colors hover:bg-mist hover:text-ink"><XIcon className="h-4 w-4" /></button>
+              </div>
+              <label htmlFor="own-prompt" className="label">Your instructions</label>
+              <textarea
+                id="own-prompt"
+                autoFocus
+                value={promptText}
+                onChange={(e) => setPromptText(e.target.value)}
+                rows={4}
+                maxLength={1000}
+                placeholder={'For example: "Say yes, the price is $50, and ask for the page URL."'}
+                className="input"
+              />
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" onClick={() => setPromptOpen(false)} className="btn-secondary min-h-[40px] px-3.5 text-sm">Cancel</button>
+                <button type="button" onClick={() => writeDraft(promptText.trim())} disabled={busy !== "" || !promptText.trim() || !messages} className="btn-primary min-h-[40px] px-3.5 text-sm">
+                  {busy === "draft" ? <SpinnerIcon /> : <SparkleIcon className="h-4 w-4" />} Generate message
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
         </div>
       </div>
     </div>
