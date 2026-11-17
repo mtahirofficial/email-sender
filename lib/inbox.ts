@@ -403,6 +403,17 @@ export async function sendConversation(supabase: SupabaseClient, userId: string,
     throw new InboxError("Gmail could not send this message. Please try again.", 502);
   }
 
+  // Sending a reply should clear unread state on the Gmail thread as well as in Outbox.
+  // Do this only for replies, and never turn a successful send into a failed request
+  // if Gmail's label update happens to fail.
+  if (kind === "reply" && messages.some((message) => message.labelIds.includes("UNREAD"))) {
+    try {
+      await markThreadRead(ctx.accessToken, target.threadId);
+    } catch (err) {
+      console.warn("inbox: reply was sent but Gmail could not mark the thread as read", err instanceof Error ? err.message : "unknown error");
+    }
+  }
+
   await logEmailAttempt(supabase, { userId, accountId: target.accountId, fromEmail: ctx.email, toEmail: to, subject, status: "sent" });
   if (conv) {
     const patch =
