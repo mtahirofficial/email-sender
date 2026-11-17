@@ -99,7 +99,7 @@ export default function ForgotPasswordForm({ resetOnly = false }: { resetOnly?: 
             <>
               <form onSubmit={requestReset} className="space-y-4">
                 <label className="block"><span className="label">Email</span><input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input" placeholder="you@example.com" /></label>
-                <button type="submit" disabled={loading} className="btn-primary w-full">{loading && <SpinnerIcon />}Email reset options</button>
+                <button type="submit" disabled={loading} className="btn-primary w-full">{loading && <SpinnerIcon />}Send email</button>
               </form>
               {sent && <form onSubmit={verifyCode} className="space-y-4 border-t border-line pt-5">
                 <label className="block"><span className="label">Security code</span><input inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} className="input" placeholder="Enter the code from your email" /></label>

@@ -56,8 +56,9 @@ const nextConfig = {
 
 module.exports = (phase) => ({
   ...nextConfig,
-  // Keep dev, production builds, and the production server on their own output directories.
-  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next-build",
+  // Keep dev and production builds separate while using Next.js' standard
+  // production output folder expected by Hostinger.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
   // Avoid recursive cleanup hitting Windows' transient file locks on generated manifests.
   cleanDistDir: process.platform !== "win32",
   experimental: {
