@@ -313,8 +313,19 @@ export async function updateInboxMail(supabase: SupabaseClient, userId: string, 
   if (!account || account.provider !== "google") throw new InboxError("Choose a Gmail account.", 400);
   if (!account.inbox_enabled) throw new InboxError("Allow Outbox to manage this Gmail inbox first.", 409, { needsPermission: true });
   const { accessToken } = await getValidAccessToken(supabase, userId, account.id);
-  if (input.action === "mark-read") await markThreadRead(accessToken, input.threadId);
-  else await setMessageStarred(accessToken, input.messageId!, input.action === "star");
+  if (input.action === "mark-read") {
+    await markThreadRead(accessToken, input.threadId);
+    const { data: conversation } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("account_id", account.id)
+      .eq("thread_id", input.threadId)
+      .maybeSingle();
+    if (conversation) await updateConversation(supabase, String(conversation.id), { reply_unseen: false });
+  } else {
+    await setMessageStarred(accessToken, input.messageId!, input.action === "star");
+  }
   return { ok: true };
 }
 

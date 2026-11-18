@@ -158,6 +158,7 @@ export default function InboxPanel() {
   const [syncProblems, setSyncProblems] = useState<{ email: string; error: string }[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [mailOpen, setMailOpen] = useState<Item | null>(null); // a message opened from the full inbox
+  const [fullInboxRefreshToken, setFullInboxRefreshToken] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null); // which mailbox is open
@@ -399,6 +400,7 @@ export default function InboxPanel() {
               <div className="mt-4">
                 <FullInbox
                   accountId={selected.id}
+                  refreshToken={fullInboxRefreshToken}
                   onOpen={(m: MailItem) =>
                     setMailOpen({
                       id: `mail:${selected.id}:${m.threadId}`, // not an Outbox conversation: the id carries the account and the Gmail thread
@@ -460,7 +462,7 @@ export default function InboxPanel() {
       </div>
 
       {mailOpen && (
-        <Conversation key={mailOpen.id} item={mailOpen} onDraft={() => { }} onClose={() => setMailOpen(null)} onChanged={async () => { }} next={() => setMailOpen(null)} />
+        <Conversation key={mailOpen.id} item={mailOpen} onDraft={() => { }} onClose={() => setMailOpen(null)} onChanged={async () => { setFullInboxRefreshToken((token) => token + 1); }} next={() => setMailOpen(null)} />
       )}
 
       {opened && (
@@ -566,15 +568,6 @@ function Conversation({
   }, []);
 
   useEffect(() => {
-    // opening a conversation with a new reply clears its highlight
-    if (!item.reply_unseen) return;
-    post("/api/inbox/status", { id: item.id, action: "seen" })
-      .then(() => onChanged(false))
-      .catch(() => { });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.id]);
-
-  useEffect(() => {
     let cancelled = false;
     call<{ messages: Message[]; threadId: string }>(`/api/inbox/thread?${new URLSearchParams(target)}`)
       .then((d) => { if (!cancelled) { setMessages(d.messages); setThreadId(d.threadId); } })
@@ -629,6 +622,7 @@ function Conversation({
     setBusy("send");
     try {
       const r = await post<{ sentTo: string }>("/api/inbox/send", { ...target, kind, body: text });
+      if (kind === "reply") setMessages((current) => current?.map((message) => ({ ...message, unread: false })) ?? null);
       toast.success(`Sent to ${r.sentTo}.`);
       await onChanged(true);
       next();

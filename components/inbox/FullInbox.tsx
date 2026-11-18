@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertIcon, MarkReadIcon, PaperclipIcon, SpinnerIcon, StarIcon } from "@/components/icons";
 
 export type MailItem = { id: string; threadId: string; from: string; subject: string; snippet: string; at: number; unread: boolean; starred: boolean; isReply: boolean; attachmentCount: number };
@@ -20,7 +20,7 @@ function when(at: number) {
  * including replies to emails that were not sent with Outbox. Gmail only moves forward page by page, so the
  * tokens of the pages already seen are remembered to allow "Newer".
  */
-export default function FullInbox({ accountId, onOpen }: { accountId: string; onOpen: (mail: MailItem) => void }) {
+export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { accountId: string; onOpen: (mail: MailItem) => void; refreshToken?: number }) {
   const [tokens, setTokens] = useState<string[]>([""]); // tokens[i] is the token that loads page i
   const [page, setPage] = useState(0);
   const [items, setItems] = useState<MailItem[] | null>(null);
@@ -31,6 +31,7 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [query, setQuery] = useState("");
+  const lastRefreshToken = useRef(refreshToken);
 
   const load = useCallback(
     async (token: string, q: string) => {
@@ -63,6 +64,12 @@ export default function FullInbox({ accountId, onOpen }: { accountId: string; on
     setItems(null);
     void load("", query);
   }, [accountId, query, load]);
+
+  useEffect(() => {
+    if (lastRefreshToken.current === refreshToken) return;
+    lastRefreshToken.current = refreshToken;
+    void load(tokens[page] ?? "", query);
+  }, [refreshToken, load, page, query, tokens]);
 
   function older() {
     if (!next) return;
