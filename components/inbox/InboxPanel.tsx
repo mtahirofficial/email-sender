@@ -435,7 +435,7 @@ export default function InboxPanel() {
                   <button
                     type="button"
                     onClick={() => setOpenId(item.id)}
-                    className={`block w-full rounded-lg border px-2 py-3 text-left transition-colors ${item.reply_unseen ? "border-accent bg-accent-soft/60 hover:bg-accent-soft" : "border-transparent hover:border-accent/30 hover:bg-mist"}`}
+                    className={`block w-full rounded-lg px-2 py-3 text-left ${item.reply_unseen ? "border border-accent bg-accent-soft/60 hover:bg-accent-soft" : "hover:bg-mist"}`}
                   >
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="min-w-0 break-all text-sm font-semibold text-ink">{item.to_email}</span>
@@ -676,7 +676,7 @@ function Conversation({
             </p>
           )}
           {messages?.map((m, i) => (
-            <div key={i} className={`min-w-0 rounded-xl px-3.5 py-2.5 text-sm ${m.fromMe ? "ml-3 bg-accent-soft text-accent-deep sm:ml-8" : "mr-3 bg-mist text-ink sm:mr-8"}`}>
+            <div key={i} className={`min-w-0 rounded-xl border border-transparent px-3.5 py-2.5 text-sm transition-colors hover:border-accent/40 ${m.fromMe ? "ml-3 bg-accent-soft text-accent-deep sm:ml-8" : "mr-3 bg-mist text-ink sm:mr-8"}`}>
               <div className="mb-1 flex items-center gap-2 text-xs opacity-70">
                 <p className="min-w-0 flex-1 truncate">{m.fromMe ? "You" : m.from} · {new Date(m.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
                 <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} title={m.starred ? "Remove star" : "Star message"} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} className={`rounded p-1 ${m.starred ? "text-amber-500" : "hover:text-amber-500"}`}><StarIcon className="h-4 w-4" /></button>

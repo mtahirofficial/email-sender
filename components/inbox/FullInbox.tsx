@@ -173,7 +173,7 @@ export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { acc
         <ul className={`mt-3 max-h-[60vh] min-w-0 divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${loading ? "opacity-60" : ""}`}>
           {items.length === 0 && <li className="px-2 py-8 text-center text-sm text-ink-soft">{query ? "Nothing matches that search." : "The inbox is empty."}</li>}
           {items.map((m) => (
-            <li key={m.id} className="flex items-center gap-1 rounded-lg border border-transparent transition-colors hover:border-accent/30 hover:bg-mist">
+            <li key={m.id} className="flex items-center gap-1 rounded-lg hover:bg-mist">
               <button type="button" onClick={() => onOpen(m)} className="block min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left">
                 <div className="flex items-center gap-x-3">
                   <span className={`min-w-0 flex-1 truncate text-sm ${m.unread ? "font-semibold text-ink" : "text-ink"}`}>{senderName(m.from)}</span>
