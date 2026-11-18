@@ -435,7 +435,7 @@ export default function InboxPanel() {
                   <button
                     type="button"
                     onClick={() => setOpenId(item.id)}
-                    className={`block w-full rounded-lg px-2 py-3 text-left ${item.reply_unseen ? "border border-accent bg-accent-soft/60 hover:bg-accent-soft" : "hover:bg-mist"}`}
+                    className={`block w-full rounded-lg border px-2 py-3 text-left transition-colors ${item.reply_unseen ? "border-accent bg-accent-soft/60 hover:bg-accent-soft" : "border-transparent hover:border-accent/30 hover:bg-mist"}`}
                   >
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="min-w-0 break-all text-sm font-semibold text-ink">{item.to_email}</span>
