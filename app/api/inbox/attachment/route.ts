@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { downloadInboxAttachment } from "@/lib/inbox";
+import { GmailApiError } from "@/lib/gmail-read";
+import { downloadInboxAttachment, InboxError } from "@/lib/inbox";
 import { inboxRoute } from "@/lib/inbox-route";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,18 @@ export const GET = (request: NextRequest) =>
     const mimeType = q.get("type") ?? "application/octet-stream";
     const size = Number(q.get("size") ?? 0);
     const openInTab = q.get("open") === "1";
-    const { attachment, bytes } = await downloadInboxAttachment(supabase, user.id, account, threadId, messageId, attachmentId, { filename, mimeType, size });
+    let attachmentData: Awaited<ReturnType<typeof downloadInboxAttachment>>;
+    try {
+      attachmentData = await downloadInboxAttachment(supabase, user.id, account, threadId, messageId, attachmentId, { filename, mimeType, size });
+    } catch (err) {
+      if (err instanceof GmailApiError) {
+        if (err.status === 400) throw new InboxError("This attachment link is invalid. Refresh the message and try again.", 400);
+        if (err.status === 404) throw new InboxError("Gmail could not find this attachment. Refresh the message and try again.", 404);
+        throw new InboxError("Gmail could not open this attachment. Please try again.", 502);
+      }
+      throw err;
+    }
+    const { attachment, bytes } = attachmentData;
     const safeName = attachment.filename.replace(/[\r\n"\\]/g, "_").slice(0, 180) || "attachment";
     const previewable = /^(application\/pdf|image\/(png|jpeg|gif|webp|avif|bmp|x-icon)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+|text\/(plain|csv))$/i.test(attachment.mimeType);
     return new NextResponse(new Uint8Array(bytes), {
