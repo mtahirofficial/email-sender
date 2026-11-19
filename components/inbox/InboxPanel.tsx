@@ -20,6 +20,7 @@ type Item = {
   reply_at: string | null;
   follow_up_count: number;
   followUpSending: boolean;
+  followUpScheduledAt?: string | null;
   ai_intent: string | null;
   ai_summary: string | null;
   followUpDue: boolean;
@@ -33,6 +34,7 @@ type Attachment = { id: string; filename: string; mimeType: string; size: number
 type Message = { id: string; from: string; fromMe: boolean; at: number; text: string; unread: boolean; starred: boolean; attachments: Attachment[] };
 type Draft = { body: string; summary?: string; intent?: string; needsReply?: boolean };
 type Tab = "replies" | "followup" | "waiting" | "done" | "all";
+type FollowUpFilter = "all" | "scheduled" | "unscheduled";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "replies", label: "Replies" },
@@ -154,6 +156,7 @@ export default function InboxPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("replies");
+  const [followUpFilter, setFollowUpFilter] = useState<FollowUpFilter>("all");
   const [syncing, setSyncing] = useState(false);
   const [syncProblems, setSyncProblems] = useState<{ email: string; error: string }[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -220,7 +223,13 @@ export default function InboxPanel() {
   const selected = accounts.find((a) => a.id === accountId) ?? accounts.find((a) => a.provider === "google" && a.inbox_enabled) ?? accounts[0] ?? null;
   const items = (data?.items ?? []).filter((i) => i.account_id === selected?.id); // this mailbox only
   const counts = Object.fromEntries(TABS.map((t) => [t.key, items.filter((i) => inTab(i, t.key)).length])) as Record<Tab, number>;
-  const list = items.filter((i) => inTab(i, tab));
+  const scheduledFollowUpCount = items.filter((item) => item.followUpDue && (item.followUpSending || Boolean(item.followUpScheduledAt))).length;
+  const list = items.filter((item) => {
+    if (!inTab(item, tab)) return false;
+    if (tab !== "followup" || followUpFilter === "all") return true;
+    const scheduled = item.followUpSending || Boolean(item.followUpScheduledAt);
+    return followUpFilter === "scheduled" ? scheduled : !scheduled;
+  });
   const hasNewDone = items.some((i) => i.reply_unseen);
   const stats = (accountId: string) => {
     const mine = (data?.items ?? []).filter((i) => i.account_id === accountId);
@@ -375,9 +384,15 @@ export default function InboxPanel() {
               <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:flex-nowrap">
                 {tab === "followup" && counts.followup > 0 && (
                   <>
-                    <button type="button" onClick={draftAll} disabled={bulk !== null} className="btn-primary min-h-[40px] px-3.5 text-sm">
+                    <label className="sr-only" htmlFor="follow-up-filter">Filter follow-ups</label>
+                    <select id="follow-up-filter" value={followUpFilter} onChange={(event) => setFollowUpFilter(event.target.value as FollowUpFilter)} className="input min-h-[40px] w-full sm:w-auto">
+                      <option value="all">All due ({counts.followup})</option>
+                      <option value="scheduled">Scheduled ({scheduledFollowUpCount})</option>
+                      <option value="unscheduled">Not scheduled ({counts.followup - scheduledFollowUpCount})</option>
+                    </select>
+                    {list.length > 0 && <button type="button" onClick={draftAll} disabled={bulk !== null} className="btn-primary min-h-[40px] px-3.5 text-sm">
                       {bulk ? <SpinnerIcon /> : null} {bulk ? `Writing ${bulk.done}/${bulk.total}` : "Write all follow-ups"}
-                    </button>
+                    </button>}
                     {bulk && (
                       <button type="button" onClick={() => (stopBulk.current = true)} className="btn-ghost min-h-[40px] px-3 text-sm">
                         Stop
@@ -414,6 +429,7 @@ export default function InboxPanel() {
                       reply_at: new Date(m.at).toISOString(),
                       follow_up_count: 0,
                       followUpSending: false,
+                      followUpScheduledAt: null,
                       ai_intent: null,
                       ai_summary: null,
                       followUpDue: false,
@@ -427,7 +443,7 @@ export default function InboxPanel() {
               {/* <ul className={`mt-4 min-w-0 max-h-[60vh] divide-y divide-line overflow-y-auto overscroll-contain pr-1 ${tab === "all" ? "hidden" : ""}`}> */}
               {list.length === 0 && (
                 <li className="px-2 py-8 text-center text-sm text-ink-soft">
-                  {tab === "replies" ? "No replies waiting for an answer." : tab === "followup" ? "Nothing needs a follow-up yet." : tab === "waiting" ? "No emails are waiting for a reply." : "Nothing here yet."}
+                  {tab === "replies" ? "No replies waiting for an answer." : tab === "followup" ? followUpFilter === "scheduled" ? "No follow-ups are scheduled." : followUpFilter === "unscheduled" ? "No due follow-ups are waiting to be scheduled." : "Nothing needs a follow-up yet." : tab === "waiting" ? "No emails are waiting for a reply." : "Nothing here yet."}
                 </li>
               )}
               {list.map((item) => (
@@ -442,6 +458,7 @@ export default function InboxPanel() {
                       {item.ai_intent && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent-deep">{INTENT[item.ai_intent] ?? item.ai_intent}</span>}
                       {item.reply_unseen && <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">New reply</span>}
                       {item.followUpSending && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"><SpinnerIcon className="h-3 w-3" />Sending follow-up</span>}
+                      {item.followUpScheduledAt && !item.followUpSending && <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-deep">Automatic follow-up scheduled</span>}
                       {drafts[item.id] && <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium text-ink">Draft ready</span>}
                       <span className="ml-auto text-xs text-ink-soft">{item.status === "replied" || item.reply_unseen ? `Replied ${ago(item.reply_at)}` : `Sent ${ago(item.sent_at)}`}</span>
                     </div>

@@ -9,7 +9,7 @@ export class GmailApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public upstreamResponse?: { statusText: string; contentType: string | null; date: string | null; body: string }
+    public upstreamResponse?: { status: number; statusText: string; contentType: string | null; date: string | null; body: string }
   ) {
     super(message);
   }
@@ -25,12 +25,16 @@ async function gmailGet(accessToken: string, path: string, retried = false): Pro
     await new Promise((resolve) => setTimeout(resolve, 1200)); // Gmail's per-second limit: wait a moment, then try once more
     return gmailGet(accessToken, path, true);
   }
+  // Gmail may answer an empty search with 204. Treat it as an empty collection,
+  // so the inbox can show its normal "no matches" state instead of a server error.
+  if (res.status === 204) return { messages: [] };
   if (!res.ok) {
     const text = await res.text();
     if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {
       throw new GoogleReadScopeError("This account did not allow Outbox to read replies.");
     }
     throw new GmailApiError(res.status, `Gmail ${res.status}: ${text.slice(0, 300)}`, {
+      status: res.status,
       statusText: res.statusText,
       contentType: res.headers.get("content-type"),
       date: res.headers.get("date"),
@@ -46,6 +50,7 @@ async function gmailGet(accessToken: string, path: string, retried = false): Pro
       return gmailGet(accessToken, path, true);
     }
     throw new GmailApiError(502, "Gmail returned an empty or invalid response.", {
+      status: res.status,
       statusText: res.statusText,
       contentType: res.headers.get("content-type"),
       date: res.headers.get("date"),
@@ -81,8 +86,29 @@ function fromBase64Url(data: string) {
   return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
 }
 
+function quotedHtmlStart(html: string) {
+  // Gmail, Outlook and Yahoo wrap previous messages in provider-specific HTML
+  // containers. Remove those before dropping the markup, or the quote becomes
+  // indistinguishable from the new reply text.
+  const quoteHtmlMarkers = [
+    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bgmail_quote\b[^"']*["'][^>]*>/i,
+    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bgmail_attr\b[^"']*["'][^>]*>/i,
+    /<div\b[^>]*\bid\s*=\s*["']divRplyFwdMsg["'][^>]*>/i,
+    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\byahoo_quoted\b[^"']*["'][^>]*>/i,
+    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bmoz-cite-prefix\b[^"']*["'][^>]*>/i,
+    /<blockquote\b[^>]*\btype\s*=\s*["']cite["'][^>]*>/i,
+  ];
+  let cutAt = -1;
+  for (const marker of quoteHtmlMarkers) {
+    const index = marker.exec(html)?.index ?? -1;
+    if (index >= 0 && (cutAt < 0 || index < cutAt)) cutAt = index;
+  }
+  return cutAt;
+}
+
 function htmlToText(html: string) {
-  return html
+  const cutAt = quotedHtmlStart(html);
+  return (cutAt >= 0 ? html.slice(0, cutAt) : html)
     .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
     .replace(/<img\b[^>]*\balt\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>/gi, (_m, doubleAlt: string, singleAlt: string) => `[image: ${doubleAlt ?? singleAlt}]`)
     .replace(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi, (_m, doubleHref: string, singleHref: string, bareHref: string, label: string) => {
@@ -141,28 +167,38 @@ function collect(part: Part, kind: "text/plain" | "text/html", out: string[]) {
 export function messageText(payload: Part): string {
   const plain: string[] = [];
   collect(payload, "text/plain", plain);
-  if (plain.join("").trim()) return plain.join("\n");
   const html: string[] = [];
   collect(payload, "text/html", html);
-  return htmlToText(html.join("\n"));
+  const plainText = plain.join("\n").trim();
+  const htmlText = html.join("\n").trim();
+  // When the HTML explicitly marks the quoted section, it is more reliable
+  // than the parallel plain-text part, which often contains the full history.
+  if (htmlText && quotedHtmlStart(htmlText) >= 0) return stripQuoted(htmlToText(htmlText));
+  if (plainText) return plainText;
+  return htmlToText(htmlText);
 }
 
 /** Removes the quoted earlier messages and signatures noise from a reply, and cuts it to a sensible length. */
 export function stripQuoted(text: string, maxChars = 2500): string {
-  let t = text.replace(/\r\n/g, "\n");
+  let t = text.replace(/\r\n/g, "\n").replace(/[\u200B-\u200D\uFEFF]/g, "");
   const cuts = [
-    /^On [\s\S]{5,250}?wrote:\s*$/m, // "On Tue, 3 Nov 2026, Ann <a@x.com> wrote:"
-    /^-{2,}\s*Original Message\s*-{2,}/im,
-    /^From:\s.+\n(?:Sent|Date):\s/m, // Outlook style header block
-    /^_{5,}\s*$/m,
+    /^\s*On\s+[\s\S]{5,500}?\s+wrote\s*:?\s*$/im, // Gmail and Apple Mail
+    /^\s*(?:Le|Am|El|Il|Op)\s+[\s\S]{5,500}?(?:schrieb|wrote|a écrit|escribió|ha scritto|schreef)\s*:?\s*$/im,
+    /^\s*-{2,}\s*(?:Original Message|Forwarded message)\s*-{2,}\s*$/im,
+    /^\s*Begin forwarded message:\s*$/im,
+    /^\s*From:\s.+\n(?:Sent|Date|To|Subject):\s/im, // Outlook style header block
+    /^\s*(?:_{5,}|-{5,})\s*$/m,
+    /^\s*_{5,}\s*$/m,
   ];
+  let firstCut = -1;
   for (const re of cuts) {
     const m = re.exec(t);
-    if (m && m.index > 0) t = t.slice(0, m.index);
+    if (m && m.index > 0 && (firstCut < 0 || m.index < firstCut)) firstCut = m.index;
   }
+  if (firstCut >= 0) t = t.slice(0, firstCut);
   t = t
     .split("\n")
-    .filter((line) => !line.startsWith(">"))
+    .filter((line) => !/^\s*>/.test(line))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -275,59 +311,51 @@ export type MailListItem = { id: string; threadId: string; from: string; subject
 
 export const INBOX_PAGE_SIZE = 50;
 
-async function listInboxMessagesPage(accessToken: string, opts: { pageToken?: string; q?: string }) {
-  const params = [`labelIds=INBOX`, `maxResults=${INBOX_PAGE_SIZE}`, `fields=messages(id,threadId),nextPageToken`];
+/** Lists Gmail conversations directly, so copies/replies to multiple recipients stay in one row. */
+export async function listInboxPage(accessToken: string, opts: { pageToken?: string; q?: string } = {}): Promise<{ items: MailListItem[]; nextPageToken: string | null }> {
+  const params = [`labelIds=INBOX`, `maxResults=${INBOX_PAGE_SIZE}`, `fields=threads(id),nextPageToken`];
   if (opts.q?.trim()) params.push(`q=${encodeURIComponent(opts.q.trim().slice(0, 200))}`);
   if (opts.pageToken) {
     if (!/^[A-Za-z0-9_-]{1,300}$/.test(opts.pageToken)) throw new GmailApiError(400, "Bad page token");
     params.push(`pageToken=${opts.pageToken}`);
   }
-  const list = await gmailGet(accessToken, `/messages?${params.join("&")}`);
-  const ids: { id: string; threadId: string }[] = list.messages ?? [];
-  const detail = "format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=In-Reply-To&fields=id,threadId,labelIds,snippet,internalDate,payload";
-  const found: (MailListItem | null)[] = new Array(ids.length).fill(null);
+  const list = await gmailGet(accessToken, `/threads?${params.join("&")}`);
+  const threads: { id: string }[] = list.threads ?? [];
+  const detail = "format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=In-Reply-To&fields=id,messages(id,labelIds,snippet,internalDate,payload)";
+  const found: (MailListItem | null)[] = new Array(threads.length).fill(null);
   let next = 0;
-  await Promise.all(Array.from({ length: Math.min(5, ids.length) }, async () => {
-    while (next < ids.length) {
+  await Promise.all(Array.from({ length: Math.min(5, threads.length) }, async () => {
+    while (next < threads.length) {
       const index = next++;
       try {
-        const raw = await gmailGet(accessToken, `/messages/${encodeURIComponent(ids[index].id)}?${detail}`);
+        const thread = await gmailGet(accessToken, `/threads/${encodeURIComponent(threads[index].id)}?${detail}`);
+        const inboxMessages = ((thread.messages ?? []) as RawMessage[])
+          .filter((message) => (message.labelIds ?? []).includes("INBOX"))
+          .sort((a, b) => Number(b.internalDate ?? 0) - Number(a.internalDate ?? 0));
+        const raw = inboxMessages[0];
+        if (!raw) continue;
         const h = (name: string) => raw.payload?.headers?.find((x: { name: string }) => x.name.toLowerCase() === name.toLowerCase())?.value ?? "";
         const subject = decodeMimeWords(h("Subject"));
         found[index] = {
           id: raw.id,
-          threadId: raw.threadId,
+          threadId: threads[index].id,
           from: decodeMimeWords(h("From")),
           subject,
           snippet: decodeEntities(raw.snippet ?? ""),
           at: Number(raw.internalDate ?? 0),
-          unread: (raw.labelIds ?? []).includes("UNREAD"),
+          unread: inboxMessages.some((message) => (message.labelIds ?? []).includes("UNREAD")),
           starred: (raw.labelIds ?? []).includes("STARRED"),
           isReply: Boolean(h("In-Reply-To")) || /^\s*re:/i.test(subject),
-          attachmentCount: attachmentList(raw.payload).length,
+          attachmentCount: inboxMessages.reduce((total, message) => total + attachmentList(message.payload).length, 0),
         };
       } catch (err) {
         if (err instanceof GoogleReadScopeError) throw err;
-        // A message deleted while listing can be skipped safely.
+        if (!(err instanceof GmailApiError) || err.status !== 404) throw err;
+        // A thread deleted while listing can be skipped safely.
       }
     }
   }));
-  return { items: found.filter((m): m is MailListItem => m !== null), nextPageToken: list.nextPageToken ?? null };
-}
-
-/** Inbox search uses Gmail's message query, then collapses matching hits by conversation. */
-export async function listInboxPage(accessToken: string, opts: { pageToken?: string; q?: string } = {}): Promise<{ items: MailListItem[]; nextPageToken: string | null }> {
-  const page = await listInboxMessagesPage(accessToken, opts);
-  if (!opts.q?.trim()) return page;
-
-  // Gmail's messages.list query returns only messages matching the search term.
-  // Keep the newest matching message per thread so unrelated conversations/messages
-  // don't leak into search results and each conversation appears only once.
-  const byThread = new Map<string, MailListItem>();
-  for (const item of page.items) {
-    if (!byThread.has(item.threadId)) byThread.set(item.threadId, item);
-  }
-  return { items: [...byThread.values()], nextPageToken: page.nextPageToken };
+  return { items: found.filter((m): m is MailListItem => m !== null).sort((a, b) => b.at - a.at), nextPageToken: list.nextPageToken ?? null };
 }
 
 /** Gmail's modify scope is required to update labels on a thread or message. */
