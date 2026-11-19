@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AccountAuthError, accountErrorInfo, getValidAccessToken, markNeedsReconnect } from "@/lib/accounts";
 import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
+import { sendSmtpMail } from "@/lib/smtp";
 import { logEmailAttempt } from "@/lib/email-logs";
 
 function isValidEmail(value: string) {
@@ -102,14 +103,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let provider: "google" | "microsoft";
+  let provider: "google" | "microsoft" | "smtp";
   let fromEmail: string;
   let accessToken: string;
+  let smtp: { host: string; port: number; secure: boolean; username: string; password: string } | undefined;
   try {
     const account = await getValidAccessToken(supabase, user.id, accountId);
     provider = account.provider;
     fromEmail = account.email;
     accessToken = account.accessToken;
+    smtp = account.smtp;
   } catch (err) {
     console.error("send-email: connected account unusable", err);
     const info = accountErrorInfo(err);
@@ -125,8 +128,12 @@ export async function POST(request: NextRequest) {
     try {
       if (provider === "google") {
         await sendGmail(accessToken, { fromEmail, to, subject: recipientSubject, body: bodyFor(to) });
-      } else {
+      } else if (provider === "microsoft") {
         await sendOutlookMail(accessToken, { to, subject: recipientSubject, body: bodyFor(to) });
+      } else if (smtp) {
+        await sendSmtpMail(smtp, { fromEmail, to, subject: recipientSubject, body: bodyFor(to) });
+      } else {
+        throw new Error("This SMTP account is missing its server details. Disconnect and reconnect it.");
       }
 
       await logEmailAttempt(supabase, {

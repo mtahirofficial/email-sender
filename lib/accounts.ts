@@ -3,7 +3,7 @@ import { encryptToken, decryptToken } from "@/lib/token-crypto";
 import { googleTokenHasSendScope, refreshGoogleAccessToken } from "@/lib/google";
 import { refreshMicrosoftAccessToken } from "@/lib/microsoft";
 
-export type Provider = "google" | "microsoft";
+export type Provider = "google" | "microsoft" | "smtp";
 
 export type ConnectedAccount = {
   id: string;
@@ -14,6 +14,9 @@ export type ConnectedAccount = {
   sheets_enabled?: boolean;
   /** True once the person allowed Outbox to read replies (Gmail only). */
   inbox_enabled?: boolean;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_secure?: boolean;
 };
 
 /** Inserts or updates a connected sender account after a successful OAuth flow. */
@@ -83,6 +86,7 @@ export async function listConnectedAccounts(
 ): Promise<ConnectedAccount[]> {
   // Newer columns first; fall back so an older database keeps working.
   const attempts = [
+    "id, provider, email, needs_reconnect, sheets_enabled, inbox_enabled, smtp_host, smtp_port, smtp_secure",
     "id, provider, email, needs_reconnect, sheets_enabled, inbox_enabled",
     "id, provider, email, needs_reconnect, sheets_enabled",
     "id, provider, email, sheets_enabled",
@@ -174,31 +178,31 @@ function classifyRefreshError(err: unknown, provider: Provider, email: string) {
 }
 
 /** A message for the person using the app, and which provider to offer "Reconnect" for. */
-export function accountErrorInfo(err: unknown): { message: string; reconnect?: Provider } {
+export function accountErrorInfo(err: unknown): { message: string; reconnect?: "google" | "microsoft" } {
   if (!(err instanceof AccountAuthError)) {
     return { message: "Could not use that connected account. Please try again." };
   }
-  const who = err.provider === "google" ? "Google" : "Microsoft";
+  const who = err.provider === "google" ? "Google" : err.provider === "microsoft" ? "Microsoft" : "SMTP";
   switch (err.reason) {
     case "revoked":
       return {
         message: `${who} no longer accepts the saved connection for ${err.email}. It may have expired or access was removed. Please reconnect it.`,
-        reconnect: err.provider,
+        ...(err.provider === "smtp" ? {} : { reconnect: err.provider }),
       };
     case "decrypt":
       return {
         message: `The saved login details for ${err.email} can't be read, because the server's encryption key changed. Disconnect this account and connect it again.`,
-        reconnect: err.provider,
+        ...(err.provider === "smtp" ? {} : { reconnect: err.provider }),
       };
     case "scope":
       return {
         message: `${who} did not give Outbox permission to send email from ${err.email}. Reconnect it, and on ${who}'s screen keep every box ticked, especially "Send email on your behalf".`,
-        reconnect: err.provider,
+        ...(err.provider === "smtp" ? {} : { reconnect: err.provider }),
       };
     case "config":
-      return { message: `The server's ${who} sign-in settings look wrong. Check GOOGLE/MICROSOFT client ID and secret, and TOKEN_ENCRYPTION_KEY, in the environment variables.` };
+      return { message: err.provider === "smtp" ? "The saved SMTP connection could not be decrypted. Disconnect it and connect it again." : `The server's ${who} sign-in settings look wrong. Check GOOGLE/MICROSOFT client ID and secret, and TOKEN_ENCRYPTION_KEY, in the environment variables.` };
     default:
-      return { message: `Could not use ${err.email} right now. Please try again, or reconnect it.`, reconnect: err.provider };
+      return { message: `Could not use ${err.email} right now. Please try again${err.provider === "smtp" ? "." : ", or reconnect it."}`, ...(err.provider === "smtp" ? {} : { reconnect: err.provider }) };
   }
 }
 
@@ -221,7 +225,7 @@ export async function getValidAccessToken(
   supabase: SupabaseClient,
   userId: string,
   accountId: string
-): Promise<{ provider: Provider; email: string; accessToken: string }> {
+): Promise<{ provider: Provider; email: string; accessToken: string; smtp?: { host: string; port: number; secure: boolean; username: string; password: string } }> {
   try {
     return await resolveAccessToken(supabase, userId, accountId);
   } catch (err) {
@@ -236,13 +240,13 @@ async function resolveAccessToken(
   supabase: SupabaseClient,
   userId: string,
   accountId: string
-): Promise<{ provider: Provider; email: string; accessToken: string }> {
-  const { data: account, error } = await supabase
-    .from("connected_accounts")
-    .select("id, provider, email, access_token, refresh_token, expires_at")
-    .eq("user_id", userId)
-    .eq("id", accountId)
-    .single();
+): Promise<{ provider: Provider; email: string; accessToken: string; smtp?: { host: string; port: number; secure: boolean; username: string; password: string } }> {
+  const query = (columns: string) => supabase.from("connected_accounts").select(columns).eq("user_id", userId).eq("id", accountId).single();
+  let result: { data: any; error: any } = await query("id, provider, email, access_token, refresh_token, expires_at, smtp_host, smtp_port, smtp_secure");
+  if (result.error && /smtp_host|smtp_port|smtp_secure/i.test(result.error.message ?? "")) {
+    result = await query("id, provider, email, access_token, refresh_token, expires_at");
+  }
+  const { data: account, error } = result;
 
   if (error || !account) {
     throw new Error("Connected account not found");
@@ -250,6 +254,18 @@ async function resolveAccessToken(
 
   const provider = account.provider as Provider;
   const email = account.email as string;
+  if (provider === "smtp") {
+    try {
+      const credentials = JSON.parse(decryptToken(account.access_token as string)) as { username: string; password: string };
+      const host = String((account as { smtp_host?: string | null }).smtp_host ?? "");
+      const port = Number((account as { smtp_port?: number | null }).smtp_port);
+      if (!host || !Number.isInteger(port) || !credentials.username || !credentials.password) throw new Error("SMTP credentials are incomplete.");
+      return { provider, email, accessToken: "", smtp: { host, port, secure: Boolean((account as { smtp_secure?: boolean }).smtp_secure), ...credentials } };
+    } catch (err) {
+      if (err instanceof AccountAuthError) throw err;
+      throw new AccountAuthError(/TOKEN_ENCRYPTION_KEY/.test(err instanceof Error ? err.message : "") ? "config" : "decrypt", provider, email, err instanceof Error ? err.message : "SMTP credentials could not be read.");
+    }
+  }
   const expiresAt = new Date(account.expires_at).getTime();
   const isExpiring = Date.now() > expiresAt - 60_000; // refresh 60s early
 

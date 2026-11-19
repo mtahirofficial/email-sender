@@ -60,7 +60,7 @@ export default function EmailTestSendForm({
         >
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {account.email} ({account.provider === "google" ? "Gmail" : "Outlook"})
+              {account.email} ({account.provider === "google" ? "Gmail" : account.provider === "microsoft" ? "Outlook" : "SMTP"})
             </option>
           ))}
         </select>

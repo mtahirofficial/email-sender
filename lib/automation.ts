@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { AccountAuthError, accountErrorInfo, getValidAccessToken, listConnectedAccounts, type Provider } from "@/lib/accounts";
 import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
+import { sendSmtpMail } from "@/lib/smtp";
 import { SheetsError, colIndex, paintSentCells, parseExtraCols, parseSheet, readValues, writeCells, type ExtraColumn, type SheetItem } from "@/lib/sheets";
 
 export type OutreachSettings = {
@@ -239,7 +240,7 @@ export function assignItems(pool: SheetItem[], senders: Sender[], used: Map<stri
 // ---- sending -------------------------------------------------------------------
 
 export async function sendViaAccount(
-  ctx: { provider: Provider; email: string; accessToken: string },
+  ctx: { provider: Provider; email: string; accessToken: string; smtp?: { host: string; port: number; secure: boolean; username: string; password: string } },
   to: string,
   subject: string,
   body: string
@@ -252,5 +253,7 @@ export async function sendViaAccount(
       if (err instanceof GoogleScopeError) throw new AccountAuthError("scope", ctx.provider, ctx.email, err.message);
       throw err;
     }
-  } else await sendOutlookMail(ctx.accessToken, { to, subject, body });
+  } else if (ctx.provider === "microsoft") await sendOutlookMail(ctx.accessToken, { to, subject, body });
+  else if (ctx.smtp) await sendSmtpMail(ctx.smtp, { fromEmail: ctx.email, to, subject, body });
+  else throw new Error("This SMTP account is missing its server details. Disconnect and reconnect it.");
 }

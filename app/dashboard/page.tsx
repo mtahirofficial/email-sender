@@ -94,8 +94,8 @@ export default async function DashboardPage() {
               <div className="rounded-2xl border border-dashed border-line bg-paper px-4 py-8 text-center"><UsersIcon className="mx-auto h-6 w-6 text-ink-soft" /><p className="mt-3 text-sm text-ink">No mailboxes connected</p><Link href="/settings#accounts" className="btn-secondary mt-4 min-h-10 px-3 text-xs">Connect an account</Link></div>
             ) : (
               <ul className="space-y-2">{accounts.slice(0, 4).map((account) => <li key={account.id} className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-sm font-semibold text-accent-deep shadow-sm">{account.provider === "google" ? "G" : "O"}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-ink">{account.email}</span><span className="text-xs text-ink-soft">{account.provider === "google" ? "Gmail" : "Outlook"}</span></span>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-sm font-semibold text-accent-deep shadow-sm">{account.provider === "google" ? "G" : account.provider === "microsoft" ? "O" : "S"}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-ink">{account.email}</span><span className="text-xs text-ink-soft">{account.provider === "google" ? "Gmail" : account.provider === "microsoft" ? "Outlook" : "SMTP"}</span></span>
                 <span className={`h-2 w-2 shrink-0 rounded-full ${account.needs_reconnect ? "bg-amber" : "bg-emerald-500"}`} title={account.needs_reconnect ? "Reconnect needed" : "Connected"} />
               </li>)}</ul>
             )}

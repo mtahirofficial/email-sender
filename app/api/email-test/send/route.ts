@@ -4,6 +4,7 @@ import { isAdminUser } from "@/lib/admin";
 import { getValidAccessToken, markNeedsReconnect } from "@/lib/accounts";
 import { GoogleScopeError, sendGmail } from "@/lib/google";
 import { sendOutlookMail } from "@/lib/microsoft";
+import { sendSmtpMail } from "@/lib/smtp";
 import { logEmailAttempt } from "@/lib/email-logs";
 import { getOwnedTrackingTest } from "@/lib/email-test/store";
 import { buildTestEmailHtml } from "@/lib/email-test/template";
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
   const html = buildTestEmailHtml(appUrl, test.public_test_id, test.element_tokens);
 
   try {
-    const { provider, email, accessToken } = await getValidAccessToken(supabase, user.id, accountId);
+    const { provider, email, accessToken, smtp } = await getValidAccessToken(supabase, user.id, accountId);
 
     if (provider === "google") {
       await sendGmail(accessToken, {
@@ -59,8 +60,12 @@ export async function POST(request: NextRequest) {
         body: html,
         isHtml: true,
       });
-    } else {
+    } else if (provider === "microsoft") {
       await sendOutlookMail(accessToken, { to, subject: test.subject, body: html, isHtml: true });
+    } else if (smtp) {
+      await sendSmtpMail(smtp, { fromEmail: email, to, subject: test.subject, body: html, isHtml: true });
+    } else {
+      throw new Error("This SMTP account is missing its server details. Disconnect and reconnect it.");
     }
 
     // Reuses the existing Sent list so test sends show up there too.

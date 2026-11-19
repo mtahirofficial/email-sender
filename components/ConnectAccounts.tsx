@@ -7,6 +7,7 @@ import type { ConnectedAccount } from "@/lib/accounts";
 import { MailIcon, PlusIcon, ShieldIcon } from "@/components/icons";
 import { reconnectHref } from "@/lib/reconnect";
 import { useConfirmAction } from "@/components/ConfirmAction";
+import SmtpAccountConnectForm from "@/components/SmtpAccountConnectForm";
 
 export default function ConnectAccounts({
   accounts,
@@ -19,6 +20,7 @@ export default function ConnectAccounts({
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmGoogle, setConfirmGoogle] = useState(false);
+  const [connectSmtp, setConnectSmtp] = useState(false);
   const { askToConfirm, confirmationDialog } = useConfirmAction();
   useScrollLock(confirmGoogle);
 
@@ -57,6 +59,7 @@ export default function ConnectAccounts({
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setConfirmGoogle(true)} className="btn-secondary min-h-11"> <PlusIcon className="h-4 w-4" /> Connect Gmail</button>
+          <button type="button" onClick={() => setConnectSmtp(true)} className="btn-secondary min-h-11"><PlusIcon className="h-4 w-4" /> Connect SMTP</button>
           {microsoftEnabled ? (
             <a href="/oauth/microsoft" className="btn-secondary min-h-11"><PlusIcon className="h-4 w-4" /> Connect Outlook</a>
           ) : (
@@ -78,8 +81,9 @@ export default function ConnectAccounts({
           <ul className="divide-y divide-line">
           {accounts.map((account) => {
             const isGoogle = account.provider === "google";
+            const providerName = isGoogle ? "Gmail" : account.provider === "microsoft" ? "Outlook" : "SMTP mail server";
             const needs = Boolean(account.needs_reconnect);
-            const canReconnect = isGoogle || microsoftEnabled;
+            const canReconnect = isGoogle || (account.provider === "microsoft" && microsoftEnabled);
             return (
               <li
                 key={account.id}
@@ -98,7 +102,7 @@ export default function ConnectAccounts({
                     <p className="truncate text-sm font-semibold text-ink" title={account.email}>
                       {account.email}
                     </p>
-                    <p className="mt-0.5 text-sm text-ink-soft">{isGoogle ? "Gmail" : "Outlook"}</p>
+                    <p className="mt-0.5 text-sm text-ink-soft">{providerName}</p>
                   </div>
                   <div className={`inline-flex min-h-8 items-center gap-2 rounded-full px-3 text-sm font-medium ${needs ? "bg-amber-soft text-amber" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}>
                     <span aria-hidden="true" className={`h-2 w-2 rounded-full ${needs ? "bg-amber" : "bg-emerald-500"}`} />
@@ -123,7 +127,7 @@ export default function ConnectAccounts({
 
                 {needs && (
                   <p className="mt-3 pl-12 text-xs leading-relaxed text-amber">
-                    This connection has expired, was removed, or is missing the &ldquo;Send email&rdquo; permission. Reconnect to keep sending.
+                    {account.provider === "smtp" ? "This SMTP connection could not be used. Disconnect it and connect it again with the correct server details." : "This connection has expired, was removed, or is missing the “Send email” permission. Reconnect to keep sending."}
                   </p>
                 )}
                 {needs && canReconnect && <a href={reconnectHref(account)} className="ml-12 mt-2 inline-flex text-xs font-semibold text-accent-deep underline underline-offset-2">Reconnect {isGoogle ? "Gmail" : "Outlook"}</a>}
@@ -162,6 +166,7 @@ export default function ConnectAccounts({
           </div>
         </div>
       )}
+      {connectSmtp && <SmtpAccountConnectForm onClose={() => setConnectSmtp(false)} onConnected={() => router.refresh()} />}
     </section>
   );
 }
