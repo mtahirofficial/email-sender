@@ -8,4 +8,4 @@ export const POST = (request: Request) =>
   inboxRoute(async ({ supabase, user }) => {
     const body = await request.json().catch(() => ({}));
     return syncInbox(supabase, user.id, body?.force === true);
-  });
+  }, request);

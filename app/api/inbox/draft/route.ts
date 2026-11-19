@@ -12,4 +12,4 @@ export const POST = (request: Request) =>
     const target = targetFrom(body);
     const instruction = typeof body.instruction === "string" ? body.instruction.trim().slice(0, 1000) : "";
     return draftConversation(supabase, user.id, target, body.kind, instruction);
-  });
+  }, request);

@@ -40,4 +40,4 @@ export const GET = (request: NextRequest) =>
         "X-Content-Type-Options": "nosniff",
       },
     });
-  });
+  }, request);

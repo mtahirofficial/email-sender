@@ -15,11 +15,11 @@ export const GET = (request: NextRequest) =>
     } catch (err) {
       if (!(err instanceof GmailApiError)) throw err;
       console.error("inbox: Gmail search/list request failed", { status: err.status, message: err.message });
-      throw new InboxError(
-        err.status === 400
-          ? "Gmail could not use that search. Try a simpler search term."
-          : "Gmail could not load the inbox. Please try again.",
-        502
-      );
+      const friendlyMessage = err.status === 400
+        ? "That search couldn’t be used. Try a shorter or simpler search."
+        : "We couldn’t load your inbox right now. Please try again in a moment.";
+      const wrapped = new InboxError(friendlyMessage, err.status === 400 ? 400 : 502);
+      (wrapped as Error & { cause?: unknown }).cause = err;
+      throw wrapped;
     }
-  });
+  }, request);

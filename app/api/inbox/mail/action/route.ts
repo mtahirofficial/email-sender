@@ -18,5 +18,5 @@ export async function POST(request: NextRequest) {
       ...(typeof messageId === "string" ? { messageId } : {}),
       action: action as "mark-read" | "star" | "unstar",
     });
-  });
+  }, request);
 }

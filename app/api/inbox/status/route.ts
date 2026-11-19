@@ -10,4 +10,4 @@ export const POST = (request: Request) =>
     if (typeof body?.id !== "string" || (body.action !== "close" && body.action !== "reopen" && body.action !== "seen")) throw new InboxError("Nothing to change.", 400);
     await setConversationStatus(supabase, user.id, body.id, body.action);
     return { ok: true };
-  });
+  }, request);

@@ -10,4 +10,4 @@ export const POST = (request: Request) =>
     const body = await request.json().catch(() => ({}));
     if ((body?.kind !== "reply" && body?.kind !== "followup") || typeof body.body !== "string") throw new InboxError("Nothing to send.", 400);
     return sendConversation(supabase, user.id, targetFrom(body), body.kind, body.body);
-  });
+  }, request);

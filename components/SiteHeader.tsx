@@ -23,6 +23,7 @@ import {
   ClockIcon,
   UsersIcon,
   BookOpenIcon,
+  AlertIcon,
 } from "@/components/icons";
 
 
@@ -50,6 +51,7 @@ const ADMIN_LINKS = [
   { href: "/admin/messages", label: "Messages", Icon: MailIcon },
   { href: "/admin/presets", label: "AI presets", Icon: SparkleIcon },
   { href: "/admin/scheduler", label: "Scheduler", Icon: SheetIcon },
+  { href: "/admin/logs", label: "Error logs", Icon: AlertIcon },
   { href: "/email-test", label: "Tracking test", Icon: FlaskIcon },
 ];
 
