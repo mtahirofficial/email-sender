@@ -78,6 +78,11 @@ export const XIcon = ({ className }: IconProps) => (
     <path d="M6 6l12 12M18 6 6 18" />
   </Svg>
 );
+export const TrashIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <path d="M4 7h16M10 11v6M14 11v6M5.5 7l.8 13h11.4l.8-13M9 7V4h6v3" />
+  </Svg>
+);
 export const PlusIcon = ({ className }: IconProps) => (
   <Svg className={className}>
     <path d="M12 5v14M5 12h14" />

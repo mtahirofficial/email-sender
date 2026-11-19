@@ -117,6 +117,9 @@ export async function listInbox(supabase: SupabaseClient, userId: string) {
     ...c,
     reply_unseen: Boolean(c.reply_unseen),
     followUpSending: Boolean(c.auto_follow_up_sending_at && Date.now() - Date.parse(c.auto_follow_up_sending_at) >= 0 && Date.now() - Date.parse(c.auto_follow_up_sending_at) < 10 * 60_000),
+    followUpScheduledAt: c.auto_follow_up_claimed_at && Date.parse(c.auto_follow_up_claimed_at) > now
+      ? String(c.auto_follow_up_claimed_at)
+      : null,
     followUpDue: isFollowUpDue({
       status: c.status,
       follow_up_count: Number(c.follow_up_count ?? 0),

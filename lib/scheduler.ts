@@ -5,6 +5,7 @@ import { addAiUsage, getAiAccess } from "@/lib/ai-usage";
 import { logEmailAttempt } from "@/lib/email-logs";
 import { listConnectedAccounts } from "@/lib/accounts";
 import { getInboxSettings, isFollowUpDue, sendAutomaticFollowUp, syncInbox } from "@/lib/inbox";
+import { writeAppErrorLog } from "@/lib/error-log";
 import {
   assignItems, computePending, getSettings, getSheetsAccess, highlightSentToday, listSenders, markSent, sendViaAccount, todayIn, usedTodayByAccount,
   type OutreachSettings,
@@ -19,6 +20,18 @@ import {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const AI_BATCH = 8;
 
+async function logSchedulerError(userId: string, error: unknown, routeType = "cron") {
+  const request = new Request("http://outbox.internal/api/cron/automation", { method: "POST" });
+  await writeAppErrorLog({
+    request,
+    error,
+    responseStatus: 500,
+    responseMessage: "An automatic follow-up could not be processed. Check the connected Gmail account and AI setup.",
+    userId,
+    context: { route: "/api/cron/automation", routeType },
+  });
+}
+
 /** Sends due follow-ups only after syncing Gmail, so a new reply prevents a send. */
 async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSettings) {
   if (!settings.auto_follow_up) return 0;
@@ -29,7 +42,8 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
     .filter((account) => account.provider === "google" && account.inbox_enabled && senders.some((sender) => sender.enabled && sender.accountId === account.id))
     .map((account) => account.id));
   if (!gmailAccounts.size) return 0;
-  const { data: sent } = await admin.from("outreach_sends").select("email, account_id").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id);
+  const { data: sent, error: sendsError } = await admin.from("outreach_sends").select("email, account_id").eq("user_id", settings.user_id).eq("spreadsheet_id", settings.spreadsheet_id);
+  if (sendsError) throw sendsError;
   const sentByAccount = new Map<string, string[]>();
   for (const item of sent ?? []) {
     const account = item.account_id as string | null;
@@ -45,10 +59,11 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
   for (const [accountId, emails] of sentByAccount) {
     if (processed >= 5) break;
     if (!emails.length) continue;
-    const { data: conversations } = await admin.from("conversations")
+    const { data: conversations, error: conversationsError } = await admin.from("conversations")
       .select("id, to_email, sent_at, last_follow_up_at, follow_up_count, thread_id, auto_follow_up_claimed_at")
       .eq("user_id", settings.user_id).eq("account_id", accountId).eq("status", "waiting")
       .in("to_email", [...new Set(emails)]).not("thread_id", "is", null).limit(100);
+    if (conversationsError) throw conversationsError;
     const due = (conversations ?? []).filter((conversation) =>
       isFollowUpDue({
         status: "waiting",
@@ -76,7 +91,8 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
         scheduledAt = new Date(slot).toISOString();
         const scheduled = await admin.from("conversations").update({ auto_follow_up_claimed_at: scheduledAt })
           .eq("id", conversation.id).eq("status", "waiting").is("auto_follow_up_claimed_at", null).select("id");
-        if (scheduled.error || !scheduled.data?.length) continue;
+        if (scheduled.error) throw scheduled.error;
+        if (!scheduled.data?.length) continue;
       }
       const scheduledMs = Date.parse(scheduledAt);
       if (!Number.isFinite(scheduledMs) || scheduledMs > Date.now()) continue;
@@ -99,6 +115,7 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
       } catch (err) {
         await admin.from("conversations").update({ auto_follow_up_claimed_at: null, auto_follow_up_sending_at: null }).eq("id", conversation.id);
         console.error("scheduler: automatic follow-up failed", err);
+        await logSchedulerError(settings.user_id, err, "automatic-follow-up");
       }
     }
   }
@@ -389,6 +406,7 @@ export async function runTickForAll(admin: SupabaseClient) {
       users++;
     } catch (err) {
       console.error("scheduler: tick failed for a user", err);
+      await logSchedulerError(row.user_id, err);
     }
   }
   return { users, sent };
@@ -410,6 +428,7 @@ export async function runTickForUserAll(admin: SupabaseClient, userId: string) {
       failed += result.failed;
     } catch (err) {
       console.error("scheduler: page tick failed for an automation", err);
+      await logSchedulerError(userId, err, "page-tick");
     }
   }
   return { prepared, sent, failed };

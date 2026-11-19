@@ -16,7 +16,7 @@ function when(at: number) {
 }
 
 /**
- * The whole inbox of one Gmail account, 50 messages a page, newest first, like Gmail. It lists everything,
+ * The whole inbox of one Gmail account, grouped by conversation and newest first. It lists everything,
  * including replies to emails that were not sent with Outbox. Gmail only moves forward page by page, so the
  * tokens of the pages already seen are remembered to allow "Newer".
  */
@@ -105,13 +105,12 @@ export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { acc
     }
   }
 
-  const first = page * 50 + 1;
   const pager = (
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" onClick={newer} disabled={page === 0 || loading} className="btn-secondary min-h-[36px] px-3 text-xs">
         Newer
       </button>
-      <span className="text-xs text-ink-soft">{items && items.length > 0 ? `${first}–${first + items.length - 1}` : "No messages"}</span>
+      <span className="text-xs text-ink-soft">{items && items.length > 0 ? `${items.length} threads` : "No threads"}</span>
       <button type="button" onClick={older} disabled={!next || loading} className="btn-secondary min-h-[36px] px-3 text-xs">
         Older
       </button>

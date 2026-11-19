@@ -13,14 +13,14 @@ export type AppErrorLog = {
     message: string;
     code?: string;
     stack?: string;
-    upstreamResponse?: { service: string; status: number; statusText: string; contentType: string | null; date: string | null; body: string };
+    upstreamResponse?: { service: string; status?: number; statusText: string; contentType: string | null; date: string | null; body: string };
   };
 };
 
 type UpstreamResponse = { status: number; statusText: string; contentType: string | null; date: string | null; body: string };
 
 const LOG_FILE = process.env.OUTBOX_ERROR_LOG_FILE || path.join(process.cwd(), "logs", "error-logs.json");
-const MAX_LOGS = 500;
+const MAX_LOGS = 100;
 const secretKeys = /token|key|secret|password|code|authorization|cookie/i;
 let writeQueue: Promise<void> = Promise.resolve();
 
@@ -60,7 +60,7 @@ export async function writeAppErrorLog(args: {
     response: { status: args.responseStatus, message: args.responseMessage },
     error: {
       name: error.name,
-      message: `${error.message}${cause instanceof Error ? ` | cause: ${cause.message}` : ""}`.slice(0, 2000),
+      message: `${error.message}${cause instanceof Error ? ` | cause: ${cause.message}` : ""}${upstream ? ` | Gmail response: HTTP ${upstream.status ?? "?"} ${upstream.statusText}; body: ${upstream.body || "(empty)"}` : ""}`.slice(0, 2000),
       ...(typeof maybeCode === "string" ? { code: maybeCode.slice(0, 100) } : cause && typeof (cause as { status?: unknown }).status === "number" ? { code: `HTTP_${(cause as { status: number }).status}` } : {}),
       ...(stack ? { stack: stack.slice(0, 6000) } : {}),
       ...(upstream ? { upstreamResponse: { service: "Gmail API", ...upstream } } : {}),
@@ -86,10 +86,40 @@ export async function writeAppErrorLog(args: {
 }
 
 export async function readAppErrorLogs(): Promise<AppErrorLog[]> {
-  try {
-    const entries = JSON.parse(await readFile(LOG_FILE, "utf8"));
-    return Array.isArray(entries) ? (entries as AppErrorLog[]).slice(0, MAX_LOGS) : [];
-  } catch {
-    return [];
-  }
+  const operation = writeQueue.then(async () => {
+    try {
+      const entries = JSON.parse(await readFile(LOG_FILE, "utf8"));
+      if (!Array.isArray(entries)) return [];
+      if (entries.length > MAX_LOGS) await writeFile(LOG_FILE, `${JSON.stringify(entries.slice(0, MAX_LOGS), null, 2)}\n`, "utf8");
+      return (entries as AppErrorLog[]).slice(0, MAX_LOGS);
+    } catch {
+      return [];
+    }
+  });
+  writeQueue = operation.then(() => undefined).catch((logError) => {
+    console.error("Could not read application error logs", logError);
+  });
+  return operation;
+}
+
+export async function deleteAppErrorLog(id: string): Promise<boolean> {
+  let removed = false;
+  const operation = writeQueue.then(async () => {
+    await mkdir(path.dirname(LOG_FILE), { recursive: true });
+    let entries: AppErrorLog[] = [];
+    try {
+      const existing = JSON.parse(await readFile(LOG_FILE, "utf8"));
+      if (Array.isArray(existing)) entries = existing as AppErrorLog[];
+    } catch {
+      return;
+    }
+    const remaining = entries.filter((entry) => entry.id !== id);
+    removed = remaining.length !== entries.length;
+    if (removed) await writeFile(LOG_FILE, `${JSON.stringify(remaining.slice(0, MAX_LOGS), null, 2)}\n`, "utf8");
+  });
+  writeQueue = operation.catch((logError) => {
+    console.error("Could not delete application error log", logError);
+  });
+  await writeQueue;
+  return removed;
 }
