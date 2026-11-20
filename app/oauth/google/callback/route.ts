@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     // Without the "send email" permission every send would fail later, so don't save a broken connection.
     if (!hasGmailSendScope(tokens.scope)) {
       const message =
-        'Google did not give Outbox permission to send email. Connect again and keep every box ticked on Google\'s screen, especially "Send email on your behalf".';
+        'Google did not give Outbox permission to send email. Connect again and allow "Send email on your behalf". Inbox reading is requested separately from the Inbox.';
       const failed = NextResponse.redirect(
         new URL(`${sheetsFlow ? "/automation" : "/settings"}?error=${encodeURIComponent(message)}`, appUrl)
       );

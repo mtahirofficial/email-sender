@@ -64,7 +64,9 @@ export function getGoogleAuthUrl(state: string, withSheets = false, withInbox = 
     ].join(" "),
     access_type: "offline", // required to receive a refresh_token
     prompt: "consent", // forces Google to re-issue a refresh_token every time
-    include_granted_scopes: "true",
+    // Do not inherit optional scopes granted by an earlier flow. Inbox and
+    // Sheets access are requested only by their own explicit connect actions.
+    include_granted_scopes: "false",
     state,
   });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;

@@ -153,8 +153,7 @@ export default function ConnectAccounts({
               Before you connect Gmail
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-              On Google&rsquo;s screen, keep <strong className="text-ink">every box ticked</strong>, especially &ldquo;Send email on your behalf&rdquo;. If it is
-              unticked, Outbox can&rsquo;t send anything.
+              This connection asks only to send email from your Gmail account. Keep &ldquo;Send email on your behalf&rdquo; allowed. Inbox reading is optional and is requested separately only when you enable Inbox.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setConfirmGoogle(false)} className="btn-ghost">

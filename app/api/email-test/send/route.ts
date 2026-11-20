@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     if (err instanceof GoogleScopeError) {
       await markNeedsReconnect(supabase, accountId, true);
       return NextResponse.json(
-        { error: 'Gmail has no permission to send from this account. Reconnect it and keep every box ticked on Google\'s screen, especially "Send email on your behalf".' },
+        { error: 'Gmail has no permission to send from this account. Reconnect it and allow "Send email on your behalf". Inbox reading is requested separately from the Inbox.' },
         { status: 502 }
       );
     }

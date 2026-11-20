@@ -196,7 +196,7 @@ export function accountErrorInfo(err: unknown): { message: string; reconnect?: "
       };
     case "scope":
       return {
-        message: `${who} did not give Outbox permission to send email from ${err.email}. Reconnect it, and on ${who}'s screen keep every box ticked, especially "Send email on your behalf".`,
+        message: `${who} did not give Outbox permission to send email from ${err.email}. Reconnect it and allow "Send email on your behalf". Inbox reading is requested separately from the Inbox.`,
         ...(err.provider === "smtp" ? {} : { reconnect: err.provider }),
       };
     case "config":
