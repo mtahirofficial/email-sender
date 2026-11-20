@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertIcon, SpinnerIcon } from "@/components/icons";
+import { AlertIcon, CheckIcon, CopyIcon, DownloadIcon, SpinnerIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
 import { useConfirmAction } from "@/components/ConfirmAction";
 
@@ -224,19 +224,21 @@ export default function EmailVerifier() {
               ))}
             </div>
             <div className="ml-auto flex flex-wrap gap-2">
-              <button type="button" onClick={copyValid} disabled={counts.valid === 0} className="btn-secondary min-h-[36px] px-3 text-xs">
-                {copied ? "Copied" : "Copy valid"}
+              <button type="button" onClick={copyValid} disabled={counts.valid === 0} aria-label={copied ? "Copied valid emails" : "Copy valid emails"} data-tooltip={copied ? "Copied" : "Copy valid emails"} className="icon-action">
+                {copied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
               </button>
               <button
                 type="button"
                 onClick={() => download("valid-emails.txt", validList().join("\n"), "text/plain")}
                 disabled={counts.valid === 0}
-                className="btn-secondary min-h-[36px] px-3 text-xs"
+                aria-label="Download valid emails as text"
+                data-tooltip="Download valid emails (.txt)"
+                className="icon-action"
               >
-                Valid (.txt)
+                <DownloadIcon className="h-4 w-4" />
               </button>
-              <button type="button" onClick={downloadCsv} className="btn-secondary min-h-[36px] px-3 text-xs">
-                All (.csv)
+              <button type="button" onClick={downloadCsv} aria-label="Download all results as CSV" data-tooltip="Download all results (.csv)" className="icon-action">
+                <DownloadIcon className="h-4 w-4" />
               </button>
             </div>
           </div>

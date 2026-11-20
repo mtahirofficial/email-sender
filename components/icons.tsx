@@ -93,6 +93,23 @@ export const RefreshIcon = ({ className }: IconProps) => (
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
   </Svg>
 );
+export const DownloadIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3" />
+  </Svg>
+);
+export const ExternalLinkIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <path d="M13 5h6v6M19 5l-8 8" />
+    <path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+  </Svg>
+);
+export const CopyIcon = ({ className }: IconProps) => (
+  <Svg className={className}>
+    <rect x="8" y="8" width="12" height="12" rx="2" />
+    <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+  </Svg>
+);
 export const UsersIcon = ({ className }: IconProps) => (
   <Svg className={className}>
     <circle cx="9" cy="8" r="3.5" />

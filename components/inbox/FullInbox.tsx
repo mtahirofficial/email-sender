@@ -186,8 +186,8 @@ export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { acc
                 <p className="truncate text-xs text-ink-soft">{m.snippet}</p>
               </button>
               <div className="flex shrink-0 items-center">
-                {m.unread && <button type="button" disabled={actionBusy === `${m.id}:mark-read`} onClick={() => void updateMessage(m, "mark-read")} title="Mark thread as read" aria-label={`Mark thread from ${senderName(m.from)} as read`} className="rounded-md p-2 text-ink-soft hover:bg-white hover:text-ink disabled:opacity-50"><MarkReadIcon className="h-4 w-4" /></button>}
-                <button type="button" disabled={actionBusy === `${m.id}:${m.starred ? "unstar" : "star"}`} onClick={() => void updateMessage(m, m.starred ? "unstar" : "star")} title={m.starred ? "Remove star" : "Star message"} aria-label={`${m.starred ? "Remove star from" : "Star"} message from ${senderName(m.from)}`} className={`rounded-md p-2 hover:bg-white disabled:opacity-50 ${m.starred ? "text-amber-500" : "text-ink-soft hover:text-amber-500"}`}><StarIcon className="h-4 w-4" /></button>
+                {m.unread && <button type="button" disabled={actionBusy === `${m.id}:mark-read`} onClick={() => void updateMessage(m, "mark-read")} aria-label={`Mark thread from ${senderName(m.from)} as read`} data-tooltip="Mark thread as read" className="icon-action"><MarkReadIcon className="h-4 w-4" /></button>}
+                <button type="button" disabled={actionBusy === `${m.id}:${m.starred ? "unstar" : "star"}`} onClick={() => void updateMessage(m, m.starred ? "unstar" : "star")} aria-label={`${m.starred ? "Remove star from" : "Star"} message from ${senderName(m.from)}`} data-tooltip={m.starred ? "Remove star" : "Star message"} className={`icon-action ${m.starred ? "text-amber-500" : ""}`}><StarIcon className="h-4 w-4" /></button>
               </div>
             </li>
           ))}

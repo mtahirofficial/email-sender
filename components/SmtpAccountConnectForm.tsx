@@ -42,7 +42,7 @@ export default function SmtpAccountConnectForm({ onClose, onConnected }: { onClo
             <h2 id="smtp-connect-title" className="font-serif text-xl">Connect a mail server</h2>
             <p className="mt-1 text-sm leading-relaxed text-ink-soft">Use Hostinger or any provider that gives you SMTP sending details. We test the connection before saving it.</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-soft hover:bg-mist hover:text-ink"><XIcon className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} aria-label="Close SMTP setup" data-tooltip="Close" className="icon-action"><XIcon className="h-4 w-4" /></button>
         </div>
 
         {connected ? (

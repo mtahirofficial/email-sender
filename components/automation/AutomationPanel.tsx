@@ -177,7 +177,9 @@ export default function AutomationPanel({
   }
 
   // Construct one editor and place that same element either in the page or in the add-sheet dialog.
-  const editor = (multipleSheetsReady || adding || !current) ? (
+  // The migration flag controls whether another sheet can be added. It must
+  // not hide the settings editor for an already linked (legacy) sheet.
+  const editor = (adding || current) ? (
     <AutomationPanelEditor
       key={adding ? "new-sheet" : selectedId}
       accounts={accounts}
@@ -188,7 +190,6 @@ export default function AutomationPanel({
       background={background}
       automationId={adding ? null : selectedId}
       settingsOpen={settingsOpen}
-      onSettingsOpenChange={setSettingsOpen}
       onConfigured={configured}
       onRemoved={removed}
       onSendersSaved={(nextSenders) => {
@@ -236,7 +237,7 @@ export default function AutomationPanel({
           </select>
         </label>
         {!adding && current && <span className="px-1 text-sm text-ink-soft">Tab: {current.sheet_title}</span>}
-        {!adding && current && <button type="button" className="btn-secondary min-h-12 px-5" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>Sheet settings</button>}
+        {!adding && current && <button type="button" className="btn-secondary min-h-12 px-5" aria-expanded={settingsOpen} aria-controls="sheet-settings-form" onClick={() => setSettingsOpen((open) => !open)}>Sheet settings</button>}
         {!adding && current && <a href={`https://docs.google.com/spreadsheets/d/${current.spreadsheet_id}/edit`} target="_blank" rel="noopener noreferrer" className="btn-secondary min-h-12 px-5"><SheetIcon className="h-4 w-4" /> Open sheet</a>}
         {!adding && <button type="button" disabled={!multipleSheetsReady} className="btn-secondary min-h-12 px-5" onClick={() => setSelection({ kind: "new", returnId: selectedId })}>Link another sheet</button>}
       </section>
@@ -254,7 +255,6 @@ function AutomationPanelEditor({
   background,
   automationId,
   settingsOpen,
-  onSettingsOpenChange,
   onConfigured,
   onRemoved,
   onSendersSaved,
@@ -266,7 +266,6 @@ function AutomationPanelEditor({
   presets: AiPreset[];
   automationId: string | null;
   settingsOpen: boolean;
-  onSettingsOpenChange: (open: boolean) => void;
   onConfigured: (settings: SettingsView, senders?: SenderView[]) => void;
   onRemoved: (id: string) => void;
   onSendersSaved: (senders: SenderView[]) => void;
@@ -321,7 +320,6 @@ function AutomationPanelEditor({
 
   // ---- status ----
   const [configured, setConfigured] = useState(Boolean(settings));
-  const [tabTitle, setTabTitle] = useState(settings?.sheet_title ?? "");
   const [stats, setStats] = useState<Stats | null>(null);
   const [used, setUsed] = useState<Record<string, number>>({});
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -515,7 +513,6 @@ function AutomationPanelEditor({
       }
       setConfigured(true);
       setSavedExtra(JSON.stringify(extraCols));
-      setTabTitle(data.sheetTitle);
       setSheetLink(sheetUrl);
       setStats(data.stats);
       setStatusError(null);
@@ -752,15 +749,29 @@ function AutomationPanelEditor({
       </div>}
 
       {/* 2. Sheet + prompt */}
-      {sheetsAccounts.length > 0 && (
-        <details className="card overflow-hidden" open={!configured || settingsOpen} onToggle={(event) => {
-          if (configured) onSettingsOpenChange(event.currentTarget.open);
-        }}>
-          <summary className={`flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6 ${configured ? "hidden" : ""}`}>
-            <span className="font-serif text-xl text-ink">{configured ? `Sheet settings · ${tabTitle || "linked sheet"}` : "Set up a linked sheet"}</span>
-            <span className="text-xs font-medium text-accent-deep">{configured ? "Edit" : "Setup"}</span>
-          </summary>
-          <div className="border-t border-line p-5 sm:p-6">
+      {(sheetsAccounts.length > 0 || configured) && (
+        <section className="card overflow-hidden">
+          {!configured && (
+            <div className="flex min-h-14 items-center justify-between gap-3 px-5 py-4 sm:px-6">
+              <span className="font-serif text-xl text-ink">Set up a linked sheet</span>
+              <span className="text-xs font-medium text-accent-deep">Setup</span>
+            </div>
+          )}
+          <div id="sheet-settings-form" hidden={configured && !settingsOpen} className="border-t border-line p-5 sm:p-6">
+            {configured && sheetsAccounts.length === 0 && (
+              <div className="mb-5 flex flex-col gap-4 rounded-xl border border-amber/30 bg-amber-soft/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <SheetIcon className="mt-0.5 h-5 w-5 shrink-0 text-accent-deep" />
+                  <div>
+                    <p className="text-sm font-semibold text-ink">Connect Google Sheets access</p>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-soft">Connect or reconnect a Gmail account and allow Google Sheets access to edit and run this workflow.</p>
+                  </div>
+                </div>
+                <a href="/oauth/google?sheets=1&next=%2Fautomation" className="btn-primary min-h-10 shrink-0 px-4 text-sm">
+                  <SheetIcon className="h-4 w-4" /> Connect account
+                </a>
+              </div>
+            )}
             <div className="space-y-5">
               <form onSubmit={importSheet} className="space-y-5">
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -787,8 +798,8 @@ function AutomationPanelEditor({
                       <option value="">Choose an account</option>
                       {availableToAdd.map((account) => <option key={account.accountId} value={account.accountId}>{account.email}</option>)}
                     </select>
-                    <button type="button" onClick={addSender} disabled={!addAccountId} className="btn-secondary min-h-11 px-4" aria-label="Add account to this sheet">
-                      <PlusIcon className="h-4 w-4" /> Add account
+                    <button type="button" onClick={addSender} disabled={!addAccountId} className="icon-action" aria-label="Add account to this sheet" data-tooltip="Add account">
+                      <PlusIcon className="h-4 w-4" />
                     </button>
                   </div>
                   {rows.length > 0 ? (
@@ -797,7 +808,7 @@ function AutomationPanelEditor({
                         <li key={r.accountId} className="flex items-center gap-3 rounded-lg bg-mist px-3 py-2">
                           <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{r.email}</span>
                           <span className="shrink-0 text-xs text-ink-soft">{accountProviderLabel(r.provider, r.smtpHost)}</span>
-                          <button type="button" onClick={() => askToConfirm({ title: `Remove ${r.email} from this sheet?`, description: "This account will not be included when you import the sheet.", confirmLabel: "Remove account", action: () => setRows((current) => current.filter((item) => item.accountId !== r.accountId)) })} className="btn-ghost min-h-8 px-2 text-red-700" aria-label={`Remove ${r.email} from this sheet`}>
+                          <button type="button" onClick={() => askToConfirm({ title: `Remove ${r.email} from this sheet?`, description: "This account will not be included when you import the sheet.", confirmLabel: "Remove account", action: () => setRows((current) => current.filter((item) => item.accountId !== r.accountId)) })} className="icon-action h-8 w-8 hover:border-red-500/30 hover:bg-red-50 hover:text-red-700" aria-label={`Remove ${r.email} from this sheet`} data-tooltip="Remove account">
                             <XIcon className="h-4 w-4" />
                           </button>
                         </li>
@@ -855,8 +866,8 @@ function AutomationPanelEditor({
                           <li key={e.col} className="flex items-center gap-2 rounded-lg bg-mist px-3 py-2 text-sm">
                             <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-white text-xs font-semibold text-ink">{e.col}</span>
                             <span className="min-w-0 flex-1 truncate text-ink">{e.header}</span>
-                            <button type="button" onClick={() => askToConfirm({ title: "Remove column?", description: "This removes the extra column from this workflow email instructions. Save the workflow to apply the change.", confirmLabel: "Remove column", action: () => setExtraCols((list) => list.filter((x) => x.col !== e.col)) })} className="text-xs font-medium text-red-700 underline underline-offset-2">
-                              Remove
+                            <button type="button" onClick={() => askToConfirm({ title: "Remove column?", description: "This removes the extra column from this workflow email instructions. Save the workflow to apply the change.", confirmLabel: "Remove column", action: () => setExtraCols((list) => list.filter((x) => x.col !== e.col)) })} className="icon-action h-8 w-8 hover:border-red-500/30 hover:bg-red-50 hover:text-red-700" aria-label={`Remove ${e.header} column`} data-tooltip="Remove column">
+                              <XIcon className="h-4 w-4" />
                             </button>
                           </li>
                         ))}
@@ -987,7 +998,7 @@ function AutomationPanelEditor({
               )}
             </div>
           </div>
-        </details>
+        </section>
       )}
 
       {/* 3. Sending accounts */}
@@ -1025,8 +1036,8 @@ function AutomationPanelEditor({
                 <option value="">Choose an account to add</option>
                 {availableToAdd.map((account) => <option key={account.accountId} value={account.accountId}>{account.email}</option>)}
               </select>
-              <button type="button" onClick={addSender} disabled={!addAccountId} className="btn-secondary min-h-11 px-4">
-                <PlusIcon className="h-4 w-4" /> Add account
+              <button type="button" onClick={addSender} disabled={!addAccountId} className="icon-action" aria-label="Add account to this sheet" data-tooltip="Add account">
+                <PlusIcon className="h-4 w-4" />
               </button>
             </div>
             {rows.length > 0 ? <ul className="space-y-2.5">
@@ -1076,8 +1087,9 @@ function AutomationPanelEditor({
                       confirmLabel: "Remove account",
                       action: () => setRows((current) => current.filter((item) => item.accountId !== r.accountId)),
                     })}
-                    className="btn-ghost min-h-10 px-2 text-red-700"
+                    className="icon-action hover:border-red-500/30 hover:bg-red-50 hover:text-red-700"
                     aria-label={`Remove ${r.email} from this sheet`}
+                    data-tooltip="Remove account"
                   >
                     <XIcon className="h-4 w-4" />
                   </button>

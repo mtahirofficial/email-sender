@@ -47,8 +47,8 @@ export default function ErrorLogsList({ initialLogs }: { initialLogs: AppErrorLo
                   onClick={() => void remove(log.id)}
                   disabled={deletingId !== null}
                   aria-label="Delete error log"
-                  title="Delete log"
-                  className="grid h-9 w-9 place-items-center rounded-lg text-ink-soft transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50"
+                  data-tooltip="Delete log"
+                  className="icon-action hover:border-red-500/30 hover:bg-red-50 hover:text-red-700"
                 >
                   {deletingId === log.id ? <SpinnerIcon className="h-4 w-4" /> : <TrashIcon className="h-4 w-4" />}
                 </button>

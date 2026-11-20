@@ -67,7 +67,8 @@ export default function ThemeToggle({
       aria-label={label}
       aria-pressed={dark}
       title={label}
-      className={className ?? `group flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm text-ink-soft transition-colors hover:bg-mist hover:text-ink ${collapsed ? "justify-center px-0" : ""}`}
+      data-tooltip={collapsed ? label : undefined}
+      className={className ?? (collapsed ? "icon-action h-10 w-10 border-0 bg-transparent" : "group flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm text-ink-soft transition-colors hover:bg-mist hover:text-ink")}
     >
       {dark ? <SunIcon className="h-[18px] w-[18px] shrink-0" /> : <MoonIcon className="h-[18px] w-[18px] shrink-0" />}
       {!collapsed && <span>{dark ? "Light theme" : "Dark theme"}</span>}

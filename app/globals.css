@@ -110,6 +110,37 @@ html[data-theme="dark"] .btn-primary:hover {
     @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-soft transition-colors hover:bg-mist hover:text-ink disabled:opacity-60;
   }
 
+  .icon-action {
+    @apply relative z-0 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-surface text-ink-soft transition-colors hover:z-20 hover:border-accent/50 hover:bg-accent-soft/60 hover:text-accent-deep disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .icon-action::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    z-index: 50;
+    left: 50%;
+    bottom: calc(100% + 7px);
+    transform: translate(-50%, 3px);
+    border-radius: 7px;
+    background: rgb(var(--ink));
+    color: rgb(var(--surface));
+    padding: 5px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.16);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+
+  .icon-action:hover::after,
+  .icon-action:focus-visible::after {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+
   .menu-item {
     @apply flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm text-ink transition-colors hover:bg-mist;
   }
