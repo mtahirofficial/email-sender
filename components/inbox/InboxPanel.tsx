@@ -324,7 +324,7 @@ export default function InboxPanel() {
                   <span className="min-w-0 flex-1">
                     <span className="block min-w-0 truncate font-medium">{a.email}</span>
                     <span className="block text-xs opacity-70">
-                      {a.provider !== "google" ? "Outlook: not supported yet" : !a.inbox_enabled ? "Not allowed yet" : s.due > 0 ? `${s.due} need a follow-up` : "Up to date"}
+                      {a.provider === "microsoft" ? "Outlook inbox not supported" : a.provider === "smtp" ? "SMTP is send-only" : !a.inbox_enabled ? "Not allowed yet" : s.due > 0 ? `${s.due} need a follow-up` : "Up to date"}
                     </span>
                   </span>
                   {s.replies > 0 && (
@@ -340,8 +340,11 @@ export default function InboxPanel() {
       </aside>
 
       <div className="min-w-0 space-y-3 sm:space-y-5">
-        {selected && selected.provider !== "google" && (
-          <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">Replies for Outlook accounts are not supported yet. Use a Gmail account here.</p>
+        {selected && selected.provider === "microsoft" && (
+          <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">Outlook inbox access is not available yet. Choose a Gmail account to view messages and replies.</p>
+        )}
+        {selected && selected.provider === "smtp" && (
+          <p className="rounded-xl border border-line bg-mist px-4 py-4 text-sm text-ink-soft">SMTP accounts can send email, but they don’t provide inbox access here. Choose a Gmail account to view messages and replies.</p>
         )}
 
         {selected && selected.provider === "google" && !selected.inbox_enabled && (

@@ -117,7 +117,7 @@ export default async function BlogPostPage(props: { params: Promise<{ slug: stri
         <aside className="relative mt-12 overflow-hidden rounded-2xl bg-accent-deep px-6 py-8 text-white">
           <div className="airmail absolute inset-x-0 top-0 h-2" aria-hidden="true" />
           <h2 className="font-serif text-2xl">Send email from your own address</h2>
-          <p className="mt-2 text-white/80">Connect Gmail or Outlook with send-only access and send individual emails in minutes.</p>
+          <p className="mt-2 text-white/80">Connect Gmail, Outlook, or your own SMTP server with send-only access and send individual emails in minutes.</p>
           <GetStartedLink className="btn-secondary mt-5" />
         </aside>
 

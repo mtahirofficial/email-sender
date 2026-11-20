@@ -1,7 +1,7 @@
 export const SITE_NAME = "Outbox";
-export const SITE_TITLE = "Outbox: Send email from your own Gmail or Outlook address";
+export const SITE_TITLE = "Outbox: Send email from Gmail, Outlook or your SMTP server";
 export const SITE_DESCRIPTION =
-  "Connect Gmail or Outlook and send individual emails from your real address, with a different subject for each recipient. Send-only access, no spoofing.";
+  "Connect Gmail, Outlook or your SMTP server and send individual emails from your own address, with a different subject for each recipient.";
 
 /** Public base URL, no trailing slash. Same variable the OAuth flows already use. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
@@ -16,5 +16,5 @@ export const OG_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: "Outbox: send email from your own Gmail or Outlook address",
+  alt: "Outbox: send email from Gmail, Outlook or your SMTP server",
 };

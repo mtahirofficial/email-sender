@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AlertIcon, CheckIcon, EyeIcon, EyeOffIcon, InfoIcon, Logo, SpinnerIcon } from "@/components/icons";
 
 const BENEFITS = [
-  "Send from your real Gmail or Outlook address",
+  "Send from your real Gmail, Outlook, or SMTP address",
   "One separate email per recipient, never Cc or Bcc",
   "Send-only access. Your inbox stays private",
 ];
@@ -129,7 +129,7 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-ink-soft">
             {isSignIn
               ? "Sign in to send from your connected mailboxes."
-              : "Takes a minute. You'll connect Gmail or Outlook next."}
+              : "Takes a minute. You'll connect Gmail, Outlook, or SMTP next."}
           </p>
 
           <div className="card mt-7 p-6">
@@ -228,7 +228,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-6 text-xs leading-relaxed text-ink-soft">
-            This account only signs you into Outbox. To send mail you&rsquo;ll connect a Gmail or Outlook account
+            This account only signs you into Outbox. To send mail you&rsquo;ll connect a Gmail, Outlook, or SMTP account
             afterward; that&rsquo;s the address recipients see. By continuing you agree to our{" "}
             <Link href="/terms" className="underline underline-offset-2 hover:text-ink">
               Terms

@@ -8,6 +8,7 @@ import { MailIcon, PlusIcon, ShieldIcon } from "@/components/icons";
 import { reconnectHref } from "@/lib/reconnect";
 import { useConfirmAction } from "@/components/ConfirmAction";
 import SmtpAccountConnectForm from "@/components/SmtpAccountConnectForm";
+import { accountProviderLabel } from "@/lib/account-label";
 
 export default function ConnectAccounts({
   accounts,
@@ -81,7 +82,7 @@ export default function ConnectAccounts({
           <ul className="divide-y divide-line">
           {accounts.map((account) => {
             const isGoogle = account.provider === "google";
-            const providerName = isGoogle ? "Gmail" : account.provider === "microsoft" ? "Outlook" : "SMTP mail server";
+            const providerName = accountProviderLabel(account.provider, account.smtp_host);
             const needs = Boolean(account.needs_reconnect);
             const canReconnect = isGoogle || (account.provider === "microsoft" && microsoftEnabled);
             return (
@@ -113,7 +114,7 @@ export default function ConnectAccounts({
                     type="button"
                     onClick={() => askToConfirm({
                       title: "Disconnect this account?",
-                      description: `Outbox will remove the saved connection for ${account.email}. Scheduled emails from this account will stop. Your Google or Microsoft account will not be changed, and you can reconnect it later.`,
+                      description: `Outbox will remove the saved connection for ${account.email}. Scheduled emails from this account will stop. Your external mail account will not be changed, and you can reconnect it later.`,
                       confirmLabel: "Disconnect account",
                       action: () => disconnect(account.id),
                     })}

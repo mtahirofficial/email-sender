@@ -6,6 +6,7 @@ import { listConnectedAccounts } from "@/lib/accounts";
 import SiteFooter from "@/components/marketing/SiteFooter";
 import LocalTime from "@/components/LocalTime";
 import { AlertIcon, CheckIcon, DashboardIcon, SendIcon, UsersIcon } from "@/components/icons";
+import { accountProviderLabel } from "@/lib/account-label";
 
 export const metadata: Metadata = { title: "Overview", robots: { index: false, follow: false } };
 
@@ -59,7 +60,7 @@ export default async function DashboardPage() {
           {[
             { label: "Successfully sent", value: sentTotal, Icon: CheckIcon, note: "All time", tone: "text-accent-deep bg-accent-soft" },
             { label: "Failed attempts", value: failedTotal, Icon: AlertIcon, note: "All time", tone: "text-amber bg-amber-soft" },
-            { label: "Connected accounts", value: accounts.length, Icon: UsersIcon, note: "Gmail and Outlook", tone: "text-violet-700 bg-violet-50" },
+            { label: "Connected accounts", value: accounts.length, Icon: UsersIcon, note: "Gmail, Outlook and SMTP", tone: "text-violet-700 bg-violet-50" },
             { label: "Total attempts", value: sentTotal + failedTotal, Icon: SendIcon, note: "All time", tone: "text-indigo-700 bg-indigo-50" },
           ].map(({ label, value, Icon, note, tone }) => (
             <section key={label} className="card p-5">
@@ -95,7 +96,7 @@ export default async function DashboardPage() {
             ) : (
               <ul className="space-y-2">{accounts.slice(0, 4).map((account) => <li key={account.id} className="flex items-center gap-3 rounded-xl border border-line bg-paper px-3 py-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-sm font-semibold text-accent-deep shadow-sm">{account.provider === "google" ? "G" : account.provider === "microsoft" ? "O" : "S"}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-ink">{account.email}</span><span className="text-xs text-ink-soft">{account.provider === "google" ? "Gmail" : account.provider === "microsoft" ? "Outlook" : "SMTP"}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-ink">{account.email}</span><span className="text-xs text-ink-soft">{accountProviderLabel(account.provider, account.smtp_host)}</span></span>
                 <span className={`h-2 w-2 shrink-0 rounded-full ${account.needs_reconnect ? "bg-amber" : "bg-emerald-500"}`} title={account.needs_reconnect ? "Reconnect needed" : "Connected"} />
               </li>)}</ul>
             )}

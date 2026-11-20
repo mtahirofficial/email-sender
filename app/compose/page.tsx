@@ -43,7 +43,7 @@ export default async function ComposePage() {
           <div className="space-y-4">
             {accounts.length === 0 && (
               <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
-                <p className="text-sm text-ink-soft">Connect a Gmail or Outlook account to start sending.</p>
+                <p className="text-sm text-ink-soft">Connect a Gmail, Outlook, or SMTP account to start sending.</p>
                 <Link href="/settings" className="btn-primary min-h-[40px] px-3.5 text-sm">
                   Connect an account in Settings
                 </Link>

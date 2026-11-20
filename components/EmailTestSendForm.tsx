@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import { AlertIcon, CheckIcon, SendIcon, SpinnerIcon } from "@/components/icons";
+import { accountProviderLabel } from "@/lib/account-label";
 
 export default function EmailTestSendForm({
   testId,
@@ -21,7 +22,7 @@ export default function EmailTestSendForm({
   if (accounts.length === 0) {
     return (
       <p className="text-sm text-ink-soft">
-        Connect a Gmail or Outlook account in Settings before sending a test email.
+        Connect a Gmail, Outlook, or SMTP account in Settings before sending a test email.
       </p>
     );
   }
@@ -60,7 +61,7 @@ export default function EmailTestSendForm({
         >
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {account.email} ({account.provider === "google" ? "Gmail" : account.provider === "microsoft" ? "Outlook" : "SMTP"})
+              {account.email} ({accountProviderLabel(account.provider, account.smtp_host)})
             </option>
           ))}
         </select>

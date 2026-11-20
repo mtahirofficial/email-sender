@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { ImageResponse } from "next/og";
 
-export const alt = "Outbox: send email from your own Gmail or Outlook address";
+export const alt = "Outbox: send email from Gmail, Outlook, or your own SMTP server";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -50,7 +50,7 @@ export default function OpengraphImage() {
             Send email that arrives from your own address.
           </div>
           <div style={{ display: "flex", fontSize: 34, color: "#4A5568", marginTop: 28 }}>
-            Gmail and Outlook. Send-only access. No spoofing.
+            Gmail, Outlook and your SMTP server.
           </div>
         </div>
       </div>

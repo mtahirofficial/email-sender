@@ -62,7 +62,10 @@ async function sendDueFollowUps(admin: SupabaseClient, settings: OutreachSetting
     const { data: conversations, error: conversationsError } = await admin.from("conversations")
       .select("id, to_email, sent_at, last_follow_up_at, follow_up_count, thread_id, auto_follow_up_claimed_at")
       .eq("user_id", settings.user_id).eq("account_id", accountId).eq("status", "waiting")
-      .in("to_email", [...new Set(emails)]).not("thread_id", "is", null).limit(100);
+      .in("to_email", [...new Set(emails)]).not("thread_id", "is", null)
+      // Always take the oldest conversations first so a large waiting list
+      // cannot keep older overdue messages outside the fixed result window.
+      .order("sent_at", { ascending: true }).limit(500);
     if (conversationsError) throw conversationsError;
     const due = (conversations ?? []).filter((conversation) =>
       isFollowUpDue({

@@ -5,7 +5,7 @@ import { breadcrumbNode, graph, organizationNode, webPageNode, websiteNode } fro
 import { CONTACT_EMAIL, LEGAL_UPDATED, OG_IMAGE, SITE_NAME } from "@/lib/site";
 
 const description =
-  "How Outbox handles your account data, connected Gmail and Outlook accounts, and send history. Send-only access, encrypted tokens, no advertising.";
+  "How Outbox handles your account data, connected Gmail, Outlook and SMTP accounts, and send history. Send-only access, encrypted credentials, no advertising.";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
     />
     <LegalPage title="Privacy Policy" updated={LEGAL_UPDATED}>
       <p>
-        {SITE_NAME} lets you send email from your own Gmail or Outlook account. This policy explains what
+        {SITE_NAME} lets you send email from your own Gmail, Outlook, or SMTP account. This policy explains what
         information we handle to make that work, why, and the choices you have. We keep it short because we
         collect as little as we can.
       </p>
@@ -57,8 +57,9 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Connected mailbox details.</strong> When you connect Gmail or Outlook we store the address of
-          that mailbox and the OAuth access and refresh tokens needed to send mail for you. Tokens are encrypted
-          before they are stored.
+          that mailbox and the OAuth access and refresh tokens needed to send mail for you. For SMTP accounts, we
+          store the email address, server host, port, security option, and encrypted password needed to send mail.
+          OAuth tokens and SMTP passwords are encrypted before they are stored.
         </li>
         <li>
           <strong>Send history.</strong> For each message you send we keep the sender address, recipient address,
@@ -91,7 +92,8 @@ export default function PrivacyPage() {
         by removing {SITE_NAME} at myaccount.google.com/permissions.
       </p>
       <p>
-        The content you write is passed to Google or Microsoft only to deliver the message you asked us to send.
+        The content you write is passed to the mail service for the account you selected (Google, Microsoft, or
+        your configured SMTP server) only to deliver the message you asked us to send.
         {" "}{SITE_NAME}&rsquo;s use and transfer of information received from Google APIs adheres to the{" "}
         <a href="https://developers.google.com/terms/api-services-user-data-policy">
           Google API Services User Data Policy
@@ -104,7 +106,8 @@ export default function PrivacyPage() {
       <h2>Service providers</h2>
       <p>
         We rely on <strong>Supabase</strong> (authentication and database), <strong>Hostinger</strong> (hosting), and
-        <strong> Google</strong> and <strong>Microsoft</strong> (the mail services you connect). They process data
+        <strong> Google</strong>, <strong>Microsoft</strong>, and the SMTP provider you choose (the mail services
+        you connect). They process data
         only to provide their service to us and are bound by their own privacy terms.
       </p>
 

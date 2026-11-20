@@ -10,7 +10,7 @@ import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 const STEPS = [
   {
     title: "Connect your mailbox",
-    body: "Sign in with Google or Microsoft and approve send-only access. Reading replies is optional and stays off until you turn on the Inbox for a Gmail account.",
+    body: "Connect Gmail or Outlook with send-only access, or add your own SMTP server. Reading replies is available for Gmail when you turn on the Inbox.",
   },
   {
     title: "Write your message",
@@ -26,7 +26,7 @@ const FEATURES = [
   {
     Icon: MailIcon,
     title: "Your real address",
-    body: "Mail goes out through Google's or Microsoft's own servers, so it is authenticated exactly like a message you sent yourself.",
+    body: "Mail goes out through your connected Gmail, Outlook, or SMTP provider, using an address you control.",
   },
   {
     Icon: UsersIcon,
@@ -45,8 +45,8 @@ const FEATURES = [
   },
   {
     Icon: CheckIcon,
-    title: "Gmail and Outlook",
-    body: "Connect one account or several, personal or work, and choose the sender for each message.",
+    title: "Gmail, Outlook and SMTP",
+    body: "Connect one or several sending accounts, including your own SMTP server, and choose the sender for each message.",
   },
   {
     Icon: LockIcon,
@@ -58,7 +58,7 @@ const FEATURES = [
 const FAQ = [
   {
     q: "Is this email spoofing?",
-    a: "No. Spoofing means forging a sender address. Outbox does the opposite: you connect your real Gmail or Outlook account, and Google or Microsoft sends the message from it. You can only send as mailboxes you have actually connected and approved.",
+    a: "No. Spoofing means forging a sender address. Outbox only sends through a Gmail, Outlook, or SMTP account that you connect and are authorized to use.",
   },
   {
     q: "Can Outbox read my inbox?",
@@ -66,7 +66,7 @@ const FAQ = [
   },
   {
     q: "Which email accounts work?",
-    a: "Gmail and Google Workspace accounts, plus Outlook.com, Hotmail and Microsoft 365 accounts. You can connect more than one and choose the sender per message.",
+    a: "Gmail and Google Workspace accounts, Outlook.com, Hotmail and Microsoft 365 accounts, plus mailboxes from providers that offer SMTP access. You can connect more than one and choose a sender per message.",
   },
   {
     q: "Will recipients see each other's addresses?",
@@ -74,7 +74,7 @@ const FAQ = [
   },
   {
     q: "Are there sending limits?",
-    a: "Yes, but they come from Google and Microsoft, not from Outbox. Each provider caps how many messages a mailbox can send per day, and those limits apply to mail sent through Outbox too.",
+    a: "Limits depend on your connected provider. Google, Microsoft, and SMTP providers each set their own sending caps and abuse controls, and those apply to mail sent through Outbox too.",
   },
   {
     q: "How do I disconnect an account?",
@@ -96,7 +96,7 @@ const jsonLd = graph(
     operatingSystem: "Any (web browser)",
     publisher: { "@id": ORG_ID },
     featureList: [
-      "Send from your own Gmail or Outlook address",
+      "Send from Gmail, Outlook or your own SMTP server",
       "Separate email for every recipient",
       "Per-recipient subject lines",
       "Sent history",
@@ -164,13 +164,13 @@ export default function Landing() {
         <section className="mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-14 sm:px-6 md:pt-20 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <p className="pill border-accent/20 bg-accent-soft text-accent-deep">
-              <ShieldIcon className="h-3.5 w-3.5" /> Send-only access to Gmail and Outlook
+              <ShieldIcon className="h-3.5 w-3.5" /> Send-only access to Gmail, Outlook, or your SMTP server
             </p>
             <h1 className="mt-6 font-serif text-4xl leading-[1.1] text-ink sm:text-5xl lg:text-6xl">
               Send email that arrives from <span className="text-accent">your own address.</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-soft">
-              Connect your Gmail or Outlook account once, then send individual emails, each with its own
+              Connect Gmail, Outlook or an SMTP server once, then send individual emails, each with its own
               subject, straight from your real mailbox. No spoofing, no shared sending domain, nothing for a
               recipient to doubt.
             </p>

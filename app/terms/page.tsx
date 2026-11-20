@@ -37,9 +37,9 @@ export default function TermsPage() {
 
       <h2>The service</h2>
       <p>
-        {SITE_NAME} is a tool that sends email through a Gmail or Outlook account that you connect and control.
-        Messages are delivered by Google or Microsoft from your own address; {SITE_NAME} does not send mail from
-        its own servers and does not let you send as an address you do not own.
+        {SITE_NAME} is a tool that sends email through a Gmail or Outlook account, or an SMTP server, that you
+        connect and control. Messages are delivered by the mail provider you selected from your own address;
+        {SITE_NAME} does not let you send as an address you do not own or are authorised to use.
       </p>
 
       <h2>Your account and connected mailboxes</h2>
@@ -60,14 +60,14 @@ export default function TermsPage() {
         <li>violate anti-spam, privacy or data-protection laws that apply to you or your recipients.</li>
       </ul>
       <p>
-        Gmail and Outlook apply their own daily sending limits and abuse controls. They may restrict your mailbox
+        Gmail, Outlook, and SMTP providers apply their own sending limits and abuse controls. They may restrict your mailbox
         independently of {SITE_NAME}, and we are not responsible for those decisions.
       </p>
 
       <h2>Third-party services</h2>
       <p>
-        The service depends on Google, Microsoft, Supabase and our hosting provider. Their availability and terms are outside our
-        control, and your use of Google and Microsoft accounts is also governed by their terms.
+        The service depends on Google, Microsoft, the SMTP providers you connect, Supabase and our hosting provider.
+        Their availability and terms are outside our control, and your use of those mail services is also governed by their terms.
       </p>
 
       <h2>Availability and changes</h2>

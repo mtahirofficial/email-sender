@@ -9,7 +9,7 @@ import { breadcrumbNode, graph, organizationNode, webPageNode, websiteNode } fro
 import { CONTACT_EMAIL, OG_IMAGE, SITE_NAME } from "@/lib/site";
 
 const description =
-  "Questions about Outbox, sending from Gmail or Outlook, or your account? Send us a message and we'll get back to you by email.";
+  "Questions about Outbox, sending from Gmail, Outlook or SMTP, or your account? Send us a message and we'll get back to you by email.";
 
 export const metadata: Metadata = {
   title: "Contact",

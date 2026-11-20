@@ -23,7 +23,11 @@ export default function AlertBanner() {
     ? "Done. Outbox can now show replies for this Gmail account."
     : connected === "google"
     ? "Gmail account connected. It's ready to send from below."
-    : "Outlook account connected. It's ready to send from below.";
+    : connected === "microsoft"
+    ? "Outlook account connected. It's ready to send from below."
+    : connected === "smtp"
+    ? "SMTP mail server connected. It's ready to send from below."
+    : "Mail account connected. It's ready to send from below.";
 
   function dismiss() {
     setDismissed(true);

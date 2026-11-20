@@ -10,12 +10,13 @@ import { useToast } from "@/components/Toaster";
 import { useConfirmAction } from "@/components/ConfirmAction";
 import LocalTime from "@/components/LocalTime";
 import { reconnectHref } from "@/lib/reconnect";
+import { accountProviderLabel } from "@/lib/account-label";
 import { useScrollLock } from "@/components/useScrollLock";
 import type { AiPreset } from "@/content/ai-presets";
 import { AlertIcon, CheckIcon, ChevronDownIcon, PlusIcon, SheetIcon, ShieldIcon, SparkleIcon, SendIcon, SpinnerIcon, UsersIcon, XIcon } from "@/components/icons";
 
 export type GoogleAccount = { id: string; email: string; sheets_enabled: boolean };
-export type SenderView = { accountId: string; email: string; provider: "google" | "microsoft" | "smtp"; limit: number; enabled: boolean; needsReconnect: boolean };
+export type SenderView = { accountId: string; email: string; provider: "google" | "microsoft" | "smtp"; smtpHost?: string | null; limit: number; enabled: boolean; needsReconnect: boolean };
 export type SettingsView = {
   id: string;
   account_id: string | null;
@@ -795,7 +796,7 @@ function AutomationPanelEditor({
                       {rows.map((r) => (
                         <li key={r.accountId} className="flex items-center gap-3 rounded-lg bg-mist px-3 py-2">
                           <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{r.email}</span>
-                          <span className="shrink-0 text-xs text-ink-soft">{r.provider === "google" ? "Gmail" : r.provider === "microsoft" ? "Outlook" : "SMTP"}</span>
+                          <span className="shrink-0 text-xs text-ink-soft">{accountProviderLabel(r.provider, r.smtpHost)}</span>
                           <button type="button" onClick={() => askToConfirm({ title: `Remove ${r.email} from this sheet?`, description: "This account will not be included when you import the sheet.", confirmLabel: "Remove account", action: () => setRows((current) => current.filter((item) => item.accountId !== r.accountId)) })} className="btn-ghost min-h-8 px-2 text-red-700" aria-label={`Remove ${r.email} from this sheet`}>
                             <XIcon className="h-4 w-4" />
                           </button>
@@ -1042,15 +1043,18 @@ function AutomationPanelEditor({
                     <span className="min-w-0">
                       <span className="block truncate text-sm text-ink" title={r.email}>{r.email}</span>
                       <span className="block text-xs text-ink-soft">
-                        {r.provider === "google" ? "Gmail" : r.provider === "microsoft" ? "Outlook" : "SMTP"} · {r.enabled ? "Available for automation" : "Temporarily paused"} · today {used[r.accountId] ?? 0} of {r.limitText || 0}
+                        {accountProviderLabel(r.provider, r.smtpHost)} · {r.enabled ? "Available for automation" : "Temporarily paused"} · today {used[r.accountId] ?? 0} of {r.limitText || 0}
                         {r.needsReconnect && <span className="font-medium text-amber"> · needs reconnect</span>}
                       </span>
                     </span>
                   </label>
-                  {r.needsReconnect && (
+                  {r.needsReconnect && r.provider !== "smtp" && (
                     <a href={reconnectHref({ provider: r.provider, sheets_enabled: sheetsAccounts.some((a) => a.id === r.accountId) }, "/automation")} className="btn-primary min-h-[40px] px-3 text-xs">
                       Reconnect
                     </a>
+                  )}
+                  {r.needsReconnect && r.provider === "smtp" && (
+                    <a href="/settings#accounts" className="btn-secondary min-h-[40px] px-3 text-xs">Update SMTP details</a>
                   )}
                   <div className="flex items-center gap-2">
                     <label htmlFor={`limit-${r.accountId}`} className="text-xs text-ink-soft">Per day</label>

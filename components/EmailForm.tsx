@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ConnectedAccount } from "@/lib/accounts";
 import AiGenerateModal from "@/components/AiGenerateModal";
 import { reconnectHref } from "@/lib/reconnect";
+import { accountProviderLabel } from "@/lib/account-label";
 import type { AiPreset } from "@/content/ai-presets";
 import { AlertIcon, CheckIcon, InfoIcon, SendIcon, SparkleIcon, SpinnerIcon } from "@/components/icons";
 import { useToast } from "@/components/Toaster";
@@ -234,7 +235,7 @@ export default function EmailForm({
           <div className="mt-6 rounded-xl border border-dashed border-line bg-paper px-5 py-10 text-center">
             <InfoIcon className="mx-auto h-6 w-6 text-ink-soft" />
             <p className="mt-3 text-sm text-ink-soft">
-              Connect a Gmail or Outlook account before composing.
+              Connect a Gmail, Outlook, or SMTP account before composing.
             </p>
           </div>
         ) : (
@@ -251,7 +252,7 @@ export default function EmailForm({
               >
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.email} ({account.provider === "google" ? "Gmail" : account.provider === "microsoft" ? "Outlook" : "SMTP"})
+                    {account.email} ({accountProviderLabel(account.provider, account.smtp_host)})
                     {account.needs_reconnect ? " - needs reconnect" : ""}
                   </option>
                 ))}
@@ -262,7 +263,7 @@ export default function EmailForm({
                   <span>
                     This connection has expired. Reconnect it, then come back: your draft is saved.{" "}
                     <a href={reconnectHref(selectedAccount)} className="font-medium underline underline-offset-2">
-                      Reconnect now
+                      {selectedAccount.provider === "smtp" ? "Update SMTP details" : "Reconnect now"}
                     </a>
                   </span>
                 </p>

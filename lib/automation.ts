@@ -192,7 +192,7 @@ export async function computePending(supabase: SupabaseClient, accessToken: stri
 
 // ---- sender accounts ---------------------------------------------------------
 
-export type Sender = { accountId: string; email: string; provider: Provider; limit: number; enabled: boolean; needsReconnect: boolean };
+export type Sender = { accountId: string; email: string; provider: Provider; smtpHost?: string | null; limit: number; enabled: boolean; needsReconnect: boolean };
 
 /** A new sheet may choose from every connected account; a configured sheet uses only its saved assignments. */
 export async function listSenders(supabase: SupabaseClient, userId: string, automationId?: string): Promise<Sender[]> {
@@ -205,6 +205,7 @@ export async function listSenders(supabase: SupabaseClient, userId: string, auto
     accountId: a.id,
     email: a.email,
     provider: a.provider,
+    smtpHost: a.smtp_host ?? null,
     limit: config.get(a.id)?.daily_limit ?? 20,
     enabled: config.get(a.id)?.enabled ?? true,
     needsReconnect: Boolean(a.needs_reconnect),

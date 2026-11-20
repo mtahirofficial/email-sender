@@ -6,7 +6,8 @@ export function reconnectHref(
   account: { provider: string; sheets_enabled?: boolean; inbox_enabled?: boolean },
   next = "/compose"
 ) {
-  if (account.provider !== "google") return "/oauth/microsoft";
+  if (account.provider === "smtp") return "/settings#accounts";
+  if (account.provider === "microsoft") return "/oauth/microsoft";
   const params = new URLSearchParams();
   if (account.sheets_enabled) params.set("sheets", "1");
   if (account.inbox_enabled) params.set("inbox", "1");

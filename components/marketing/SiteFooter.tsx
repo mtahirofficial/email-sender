@@ -12,7 +12,7 @@ export default function SiteFooter() {
             <span className="font-brand text-2xl font-semibold tracking-wide text-ink">{SITE_NAME}</span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-            Send individual emails from your own Gmail or Outlook address, with send-only access.
+            Send individual emails from Gmail, Outlook, or your own SMTP server.
           </p>
         </div>
 
