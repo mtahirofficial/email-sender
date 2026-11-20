@@ -244,7 +244,7 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
 
         <header className={`app-topbar fixed right-0 top-0 z-30 flex h-[68px] items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur transition-[left] duration-200 sm:px-6 ${collapsed ? "left-0 md:left-[76px]" : "left-0 md:left-[252px]"}`}>
           <div className="flex min-w-0 items-center gap-3">
-            <button type="button" onClick={() => { if (window.innerWidth < 768) setMobileOpen(true); else toggleSidebar(); }} className="icon-action h-10 w-10" aria-label={collapsed ? "Expand sidebar or open navigation" : "Collapse sidebar or open navigation"} data-tooltip={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+            <button type="button" onClick={() => { if (window.innerWidth < 768) setMobileOpen(true); else toggleSidebar(); }} className="icon-action h-10 w-10" aria-label={collapsed ? "Expand sidebar or open navigation" : "Collapse sidebar or open navigation"}>
               <MenuIcon className="h-5 w-5" />
             </button>
             <span className="max-w-[calc(50vw-5rem)] truncate text-sm font-semibold text-ink md:max-w-none">{pageTitle}</span>

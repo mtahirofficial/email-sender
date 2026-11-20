@@ -404,11 +404,11 @@ export default function InboxPanel() {
                   </>
                 )}
                 {tab !== "all" && (
-                  <button type="button" onClick={() => sync(true)} disabled={syncing} aria-label={syncing ? "Refreshing inbox" : "Refresh inbox"} data-tooltip={syncing ? "Refreshing…" : "Refresh inbox"} className="icon-action">
+                  <button type="button" onClick={() => sync(true)} disabled={syncing} aria-label={syncing ? "Refreshing inbox" : "Refresh inbox"} className="icon-action">
                     {syncing ? <SpinnerIcon /> : <RefreshIcon className="h-4 w-4" />}
                   </button>
                 )}
-                <Link href="/settings#inbox" className="icon-action" aria-label="Inbox settings" data-tooltip="Inbox settings">
+                <Link href="/settings#inbox" className="icon-action" aria-label="Inbox settings">
                   <SettingsIcon className="h-4 w-4" />
                 </Link>
               </div>
@@ -673,8 +673,8 @@ function Conversation({
             <p className="max-w-[52%] shrink truncate font-semibold text-ink" title={item.to_email}>{item.to_email}</p>
             <p className="min-w-0 flex-1 truncate text-sm text-ink-soft" title={item.subject}>{item.subject}</p>
           </div>
-          {messages?.some((m) => m.unread) && <button type="button" onClick={() => void updateMail("mark-read")} disabled={busy !== ""} aria-label="Mark thread as read" data-tooltip="Mark thread as read" className="icon-action h-8 w-8"><MarkReadIcon className="h-4 w-4" /></button>}
-          <button type="button" onClick={onClose} aria-label="Close conversation" data-tooltip="Close conversation" className="icon-action h-8 w-8">
+          {messages?.some((m) => m.unread) && <button type="button" onClick={() => void updateMail("mark-read")} disabled={busy !== ""} aria-label="Mark thread as read" className="icon-action h-8 w-8"><MarkReadIcon className="h-4 w-4" /></button>}
+          <button type="button" onClick={onClose} aria-label="Close conversation" className="icon-action h-8 w-8">
             <XIcon className="h-4 w-4" />
           </button>
         </div>
@@ -699,7 +699,7 @@ function Conversation({
             <div key={i} className={`min-w-0 rounded-xl border border-transparent px-3.5 py-2.5 text-sm transition-colors hover:border-accent/40 ${m.fromMe ? "ml-3 bg-accent-soft text-accent-deep sm:ml-8" : "mr-3 bg-mist text-ink sm:mr-8"}`}>
               <div className="mb-1 flex items-center gap-2 text-xs opacity-70">
                 <p className="min-w-0 flex-1 truncate">{m.fromMe ? "You" : m.from} · {new Date(m.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
-                <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} data-tooltip={m.starred ? "Remove star" : "Star message"} className={`icon-action h-7 w-7 ${m.starred ? "text-amber-500" : ""}`}><StarIcon className="h-4 w-4" /></button>
+                <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} className={`icon-action h-7 w-7 ${m.starred ? "text-amber-500" : ""}`}><StarIcon className="h-4 w-4" /></button>
               </div>
               <FormattedEmail text={m.text} />
               {m.attachments.length > 0 && (
@@ -714,13 +714,12 @@ function Conversation({
                           <PaperclipIcon className="h-4 w-4 shrink-0 text-accent-deep" />
                           <span className="min-w-0 flex-1"><span className="block truncate font-medium text-ink group-hover:text-accent-deep">{attachment.filename}</span><span className="text-ink-soft">{attachmentSize(attachment.size) || attachment.mimeType}</span></span>
                           <span className="flex shrink-0 items-center gap-1 [@media(hover:hover)]:hidden [@media(hover:hover)]:group-hover:flex [@media(hover:hover)]:group-focus-within:flex">
-                            <a href={`${attachmentUrl}&open=1`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${attachment.filename} in a new tab`} data-tooltip="Open in new tab" className="icon-action"><ExternalLinkIcon className="h-4 w-4" /></a>
+                            <a href={`${attachmentUrl}&open=1`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${attachment.filename} in a new tab`} className="icon-action"><ExternalLinkIcon className="h-4 w-4" /></a>
                             <a
                               href={attachmentUrl}
                               download={attachment.filename}
                               aria-label={`Download ${attachment.filename}`}
                               aria-busy={downloadingAttachment === attachment.id}
-                              data-tooltip={downloadingAttachment === attachment.id ? "Downloading…" : "Download"}
                               onClick={() => {
                                 setDownloadingAttachment(attachment.id);
                                 if (downloadResetRef.current) clearTimeout(downloadResetRef.current);

@@ -224,7 +224,7 @@ export default function EmailVerifier() {
               ))}
             </div>
             <div className="ml-auto flex flex-wrap gap-2">
-              <button type="button" onClick={copyValid} disabled={counts.valid === 0} aria-label={copied ? "Copied valid emails" : "Copy valid emails"} data-tooltip={copied ? "Copied" : "Copy valid emails"} className="icon-action">
+              <button type="button" onClick={copyValid} disabled={counts.valid === 0} aria-label={copied ? "Copied valid emails" : "Copy valid emails"} className="icon-action">
                 {copied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
               </button>
               <button
@@ -232,12 +232,11 @@ export default function EmailVerifier() {
                 onClick={() => download("valid-emails.txt", validList().join("\n"), "text/plain")}
                 disabled={counts.valid === 0}
                 aria-label="Download valid emails as text"
-                data-tooltip="Download valid emails (.txt)"
                 className="icon-action"
               >
                 <DownloadIcon className="h-4 w-4" />
               </button>
-              <button type="button" onClick={downloadCsv} aria-label="Download all results as CSV" data-tooltip="Download all results (.csv)" className="icon-action">
+              <button type="button" onClick={downloadCsv} aria-label="Download all results as CSV" className="icon-action">
                 <DownloadIcon className="h-4 w-4" />
               </button>
             </div>

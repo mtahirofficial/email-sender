@@ -15,7 +15,7 @@ export default function RefreshButton() {
   }
 
   return (
-    <button type="button" onClick={handleClick} className="icon-action" aria-label={refreshing ? "Refreshing results" : "Refresh results"} data-tooltip={refreshing ? "Refreshing…" : "Refresh results"} aria-live="polite">
+    <button type="button" onClick={handleClick} className="icon-action" aria-label={refreshing ? "Refreshing results" : "Refresh results"} aria-live="polite">
       <RefreshIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
     </button>
   );

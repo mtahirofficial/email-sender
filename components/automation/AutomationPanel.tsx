@@ -798,7 +798,7 @@ function AutomationPanelEditor({
                       <option value="">Choose an account</option>
                       {availableToAdd.map((account) => <option key={account.accountId} value={account.accountId}>{account.email}</option>)}
                     </select>
-                    <button type="button" onClick={addSender} disabled={!addAccountId} className="icon-action" aria-label="Add account to this sheet" data-tooltip="Add account">
+                    <button type="button" onClick={addSender} disabled={!addAccountId} className="icon-action" aria-label="Add account to this sheet">
                       <PlusIcon className="h-4 w-4" />
                     </button>
                   </div>
@@ -808,7 +808,7 @@ function AutomationPanelEditor({
                         <li key={r.accountId} className="flex items-center gap-3 rounded-lg bg-mist px-3 py-2">
                           <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{r.email}</span>
                           <span className="shrink-0 text-xs text-ink-soft">{accountProviderLabel(r.provider, r.smtpHost)}</span>
-                          <button type="button" onClick={() => askToConfirm({ title: `Remove ${r.email} from this sheet?`, description: "This account will not be included when you import the sheet.", confirmLabel: "Remove account", action: () => setRows((current) => current.filter((item) => item.accountId !== r.accountId)) })} className="icon-action h-8 w-8 hover:border-red-500/30 hover:bg-red-50 hover:text-red-700" aria-label={`Remove ${r.email} from this sheet`} data-tooltip="Remove account">
+                          <button type="button" onClick={() => askToConfirm({ title: `Remove ${r.email} from this sheet?`, description: "This account will not be included when you import the sheet.", confirmLabel: "Remove account", action: () => setRows((current) => current.filter((item) => item.accountId !== r.accountId)) })} className="icon-action h-8 w-8 hover:border-red-500/30 hover:bg-red-50 hover:text-red-700" aria-label={`Remove ${r.email} from this sheet`}>
                             <XIcon className="h-4 w-4" />
                           </button>
                         </li>
@@ -866,7 +866,7 @@ function AutomationPanelEditor({
                           <li key={e.col} className="flex items-center gap-2 rounded-lg bg-mist px-3 py-2 text-sm">
                             <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-white text-xs font-semibold text-ink">{e.col}</span>
                             <span className="min-w-0 flex-1 truncate text-ink">{e.header}</span>
-                            <button type="button" onClick={() => askToConfirm({ title: "Remove column?", description: "This removes the extra column from this workflow email instructions. Save the workflow to apply the change.", confirmLabel: "Remove column", action: () => setExtraCols((list) => list.filter((x) => x.col !== e.col)) })} className="icon-action h-8 w-8 hover:border-red-500/30 hover:bg-red-50 hover:text-red-700" aria-label={`Remove ${e.header} column`} data-tooltip="Remove column">
+                            <button type="button" onClick={() => askToConfirm({ title: "Remove column?", description: "This removes the extra column from this workflow email instructions. Save the workflow to apply the change.", confirmLabel: "Remove column", action: () => setExtraCols((list) => list.filter((x) => x.col !== e.col)) })} className="icon-action h-8 w-8 hover:border-red-500/30 hover:bg-red-50 hover:text-red-700" aria-label={`Remove ${e.header} column`}>
                               <XIcon className="h-4 w-4" />
                             </button>
                           </li>
@@ -1036,7 +1036,7 @@ function AutomationPanelEditor({
                 <option value="">Choose an account to add</option>
                 {availableToAdd.map((account) => <option key={account.accountId} value={account.accountId}>{account.email}</option>)}
               </select>
-              <button type="button" onClick={addSender} disabled={!addAccountId} className="icon-action" aria-label="Add account to this sheet" data-tooltip="Add account">
+              <button type="button" onClick={addSender} disabled={!addAccountId} className="icon-action" aria-label="Add account to this sheet">
                 <PlusIcon className="h-4 w-4" />
               </button>
             </div>
@@ -1089,7 +1089,6 @@ function AutomationPanelEditor({
                     })}
                     className="icon-action hover:border-red-500/30 hover:bg-red-50 hover:text-red-700"
                     aria-label={`Remove ${r.email} from this sheet`}
-                    data-tooltip="Remove account"
                   >
                     <XIcon className="h-4 w-4" />
                   </button>
