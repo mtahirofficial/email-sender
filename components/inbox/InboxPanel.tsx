@@ -31,7 +31,7 @@ type Account = { id: string; email: string; provider: string; inbox_enabled: boo
 type Settings = { follow_up_after_days: number; max_follow_ups: number; instructions: string; last_sync_at: string | null };
 type Data = { settings: Settings; accounts: Account[]; items: Item[] };
 type Attachment = { id: string; filename: string; mimeType: string; size: number };
-type Message = { id: string; from: string; fromMe: boolean; at: number; text: string; unread: boolean; starred: boolean; attachments: Attachment[] };
+type Message = { id: string; from: string; fromMe: boolean; at: number; text: string; quotedText?: string; unread: boolean; starred: boolean; attachments: Attachment[] };
 type Draft = { body: string; summary?: string; intent?: string; needsReply?: boolean };
 type Tab = "replies" | "followup" | "waiting" | "done" | "all";
 type FollowUpFilter = "all" | "scheduled" | "unscheduled";
@@ -132,6 +132,29 @@ function FormattedEmail({ text }: { text: string }) {
       {paragraphs.map((paragraph, index) => (
         <p key={index} className="whitespace-pre-wrap">{formattedEmailText(paragraph)}</p>
       ))}
+    </div>
+  );
+}
+
+function QuotedMessage({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-label={open ? "Hide quoted message" : "Show quoted message"}
+        title={open ? "Hide quoted message" : "Show quoted message"}
+        className="inline-flex h-6 min-w-7 items-center justify-center rounded-full bg-ink/10 px-2 text-xs font-semibold tracking-[0.16em] text-ink-soft transition-colors hover:bg-ink/15 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        •••
+      </button>
+      {open && (
+        <div className="mt-2 border-l-2 border-accent/60 pl-3 text-ink-soft">
+          <FormattedEmail text={text} />
+        </div>
+      )}
     </div>
   );
 }
@@ -701,6 +724,7 @@ function Conversation({
                 <p className="min-w-0 flex-1 truncate">{m.fromMe ? "You" : m.from} · {new Date(m.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
                 <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} className={`icon-action h-7 w-7 ${m.starred ? "text-amber-500" : ""}`}><StarIcon className="h-4 w-4" /></button>
               </div>
+              {m.quotedText && <QuotedMessage text={m.quotedText} />}
               <FormattedEmail text={m.text} />
               {m.attachments.length > 0 && (
                 <div className="mt-3 space-y-2 border-t border-current/10 pt-3">

@@ -86,29 +86,8 @@ function fromBase64Url(data: string) {
   return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
 }
 
-function quotedHtmlStart(html: string) {
-  // Gmail, Outlook and Yahoo wrap previous messages in provider-specific HTML
-  // containers. Remove those before dropping the markup, or the quote becomes
-  // indistinguishable from the new reply text.
-  const quoteHtmlMarkers = [
-    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bgmail_quote\b[^"']*["'][^>]*>/i,
-    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bgmail_attr\b[^"']*["'][^>]*>/i,
-    /<div\b[^>]*\bid\s*=\s*["']divRplyFwdMsg["'][^>]*>/i,
-    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\byahoo_quoted\b[^"']*["'][^>]*>/i,
-    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bmoz-cite-prefix\b[^"']*["'][^>]*>/i,
-    /<blockquote\b[^>]*\btype\s*=\s*["']cite["'][^>]*>/i,
-  ];
-  let cutAt = -1;
-  for (const marker of quoteHtmlMarkers) {
-    const index = marker.exec(html)?.index ?? -1;
-    if (index >= 0 && (cutAt < 0 || index < cutAt)) cutAt = index;
-  }
-  return cutAt;
-}
-
 function htmlToText(html: string) {
-  const cutAt = quotedHtmlStart(html);
-  return (cutAt >= 0 ? html.slice(0, cutAt) : html)
+  return html
     .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
     .replace(/<img\b[^>]*\balt\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>/gi, (_m, doubleAlt: string, singleAlt: string) => `[image: ${doubleAlt ?? singleAlt}]`)
     .replace(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi, (_m, doubleHref: string, singleHref: string, bareHref: string, label: string) => {
@@ -132,6 +111,73 @@ function htmlToText(html: string) {
       try { return String.fromCodePoint(point); } catch { return ""; }
     })
     .replace(/\n{3,}/g, "\n\n");
+}
+
+function tagEnd(html: string, tag: string, start: number) {
+  const token = new RegExp(`<\\/?${tag}\\b[^>]*>`, "gi");
+  token.lastIndex = start;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = token.exec(html))) {
+    if (match[0].startsWith("</")) depth--;
+    else if (!/\/>$/.test(match[0])) depth++;
+    if (depth === 0) return token.lastIndex;
+  }
+  return -1;
+}
+
+function splitQuotedHtml(html: string): { text: string; quotedText?: string } {
+  const blockquote = /<blockquote\b[^>]*\btype\s*=\s*["']cite["'][^>]*>/i.exec(html);
+  if (blockquote) {
+    const end = tagEnd(html, "blockquote", blockquote.index);
+    if (end >= 0) {
+      const before = html.slice(0, blockquote.index);
+      const attributionPattern = /On\b[\s\S]{0,700}?wrote:\s*/gi;
+      let attribution: RegExpExecArray | null;
+      let lastAttribution: RegExpExecArray | null = null;
+      while ((attribution = attributionPattern.exec(before))) lastAttribution = attribution;
+      const quoteStart = lastAttribution?.index ?? blockquote.index;
+      const quoteHtml = html.slice(quoteStart, end);
+      const bodyHtml = `${html.slice(0, quoteStart)}${html.slice(end)}`;
+      return { text: htmlToText(bodyHtml).trim(), quotedText: htmlToText(quoteHtml).trim() || undefined };
+    }
+  }
+
+  const markers = [
+    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bgmail_quote\b[^"']*["'][^>]*>/i,
+    /<div\b[^>]*\bid\s*=\s*["']divRplyFwdMsg["'][^>]*>/i,
+    /<div\b[^>]*\bclass\s*=\s*["'][^"']*\byahoo_quoted\b[^"']*["'][^>]*>/i,
+  ];
+  const marker = markers.map((regex) => regex.exec(html)).filter((x): x is RegExpExecArray => Boolean(x)).sort((a, b) => a.index - b.index)[0];
+  if (!marker) return { text: htmlToText(html).trim() };
+  const tag = /^<([a-z]+)/i.exec(marker[0])?.[1] ?? "div";
+  const end = tagEnd(html, tag, marker.index);
+  if (end < 0) return { text: htmlToText(html).trim() };
+  const quoteStart = marker.index;
+  return {
+    text: htmlToText(`${html.slice(0, quoteStart)}${html.slice(end)}`).trim(),
+    quotedText: htmlToText(html.slice(quoteStart, end)).trim() || undefined,
+  };
+}
+
+function splitQuotedPlain(text: string): { text: string; quotedText?: string } {
+  const normalized = text.replace(/\r\n?/g, "\n").trim();
+  const attribution = /^\s*(?:On\s+[^\n]{5,500}?wrote:?|(?:Le|Am|El|Il|Op)\s+[^\n]{5,500}?(?:schrieb|wrote|a écrit|escribió|ha scritto|schreef):?)\s*$/im.exec(normalized);
+  if (!attribution) return { text: stripQuoted(normalized) };
+  const before = normalized.slice(0, attribution.index).trim();
+  const after = normalized.slice(attribution.index + attribution[0].length);
+  if (before) return { text: stripQuoted(before), quotedText: after.trim() || attribution[0].trim() };
+
+  const lines = after.split("\n");
+  let lastQuoted = -1;
+  for (let index = 0; index < lines.length; index++) {
+    if (/^\s*>/.test(lines[index])) lastQuoted = index;
+    else if (lastQuoted >= 0 && lines[index].trim()) {
+      const quotedText = `${attribution[0].trim()}\n${lines.slice(0, index).join("\n")}`.trim();
+      return { text: stripQuoted(lines.slice(index).join("\n")), quotedText };
+    }
+  }
+  return { text: "", quotedText: `${attribution[0].trim()}\n${after}`.trim() };
 }
 
 type Part = { partId?: string; mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string; size?: number }; parts?: Part[] };
@@ -164,18 +210,19 @@ function collect(part: Part, kind: "text/plain" | "text/html", out: string[]) {
 }
 
 /** Readable text of a message: the plain part if there is one, otherwise the HTML with tags removed. */
-export function messageText(payload: Part): string {
+export function messageContent(payload: Part): { text: string; quotedText?: string } {
   const plain: string[] = [];
   collect(payload, "text/plain", plain);
   const html: string[] = [];
   collect(payload, "text/html", html);
   const plainText = plain.join("\n").trim();
   const htmlText = html.join("\n").trim();
-  // When the HTML explicitly marks the quoted section, it is more reliable
-  // than the parallel plain-text part, which often contains the full history.
-  if (htmlText && quotedHtmlStart(htmlText) >= 0) return stripQuoted(htmlToText(htmlText));
-  if (plainText) return plainText;
-  return htmlToText(htmlText);
+  if (htmlText) {
+    const htmlContent = splitQuotedHtml(htmlText);
+    if (htmlContent.quotedText) return { ...htmlContent, text: stripQuoted(htmlContent.text) };
+  }
+  if (plainText) return splitQuotedPlain(plainText);
+  return { text: stripQuoted(htmlToText(htmlText)) };
 }
 
 /** Removes the quoted earlier messages and signatures noise from a reply, and cuts it to a sensible length. */
@@ -218,6 +265,7 @@ export type ThreadMessage = {
   messageId: string; // the Message-ID header, used to reply inside the same conversation
   references: string;
   text?: string;
+  quotedText?: string;
   attachments?: ThreadAttachment[];
 };
 
@@ -235,7 +283,7 @@ function toMessage(raw: RawMessage, withText: boolean, withAttachmentData = fals
     subject: decodeMimeWords(h("Subject")),
     messageId: h("Message-ID") || h("Message-Id"),
     references: h("References"),
-    ...(withText && raw.payload ? { text: stripQuoted(messageText(raw.payload)), attachments: attachmentList(raw.payload, withAttachmentData) } : {}),
+    ...(withText && raw.payload ? { ...messageContent(raw.payload), attachments: attachmentList(raw.payload, withAttachmentData) } : {}),
   };
 }
 

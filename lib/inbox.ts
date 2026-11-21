@@ -340,7 +340,7 @@ export async function openThread(supabase: SupabaseClient, userId: string, input
   return {
     from: ctx.email,
     threadId: target.threadId,
-    messages: messages.map((m) => ({ id: m.id, from: m.from, fromMe: isMine(m, ctx.email), at: m.at, text: m.text || m.snippet, unread: m.labelIds.includes("UNREAD"), starred: m.labelIds.includes("STARRED"), attachments: m.attachments ?? [] })),
+    messages: messages.map((m) => ({ id: m.id, from: m.from, fromMe: isMine(m, ctx.email), at: m.at, text: m.text || m.snippet, quotedText: m.quotedText, unread: m.labelIds.includes("UNREAD"), starred: m.labelIds.includes("STARRED"), attachments: m.attachments ?? [] })),
   };
 }
 
