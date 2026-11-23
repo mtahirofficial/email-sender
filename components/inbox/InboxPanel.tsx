@@ -591,6 +591,7 @@ function Conversation({
   const [showDraftInfo, setShowDraftInfo] = useState(false);
   const [downloadingAttachment, setDownloadingAttachment] = useState<string | null>(null);
   const downloadResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestMessageRef = useRef<HTMLDivElement>(null);
   // A message opened from the full inbox is not an Outbox conversation: it is found by account + Gmail thread.
   const synthetic = item.id.startsWith("mail:");
   const target: Record<string, string> = synthetic ? { account: item.account_id, thread: item.id.split(":")[2] } : { id: item.id };
@@ -619,6 +620,11 @@ function Conversation({
       cancelled = true;
     };
   }, [item.id]);
+
+  useEffect(() => {
+    if (!messages?.length) return;
+    latestMessageRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+  }, [messages?.length]);
 
   async function updateMail(action: "mark-read" | "star" | "unstar", messageId?: string) {
     if (!threadId) return;
@@ -719,7 +725,7 @@ function Conversation({
             </p>
           )}
           {messages?.map((m, i) => (
-            <div key={i} className={`min-w-0 rounded-xl border border-transparent px-3.5 py-2.5 text-sm transition-colors hover:border-accent/40 ${m.fromMe ? "ml-3 bg-accent-soft text-accent-deep sm:ml-8" : "mr-3 bg-mist text-ink sm:mr-8"}`}>
+            <div key={i} ref={i === messages.length - 1 ? latestMessageRef : undefined} className={`min-w-0 rounded-xl border border-transparent px-3.5 py-2.5 text-sm transition-colors hover:border-accent/40 ${m.fromMe ? "outgoing-message ml-3 bg-accent-soft text-accent-deep sm:ml-8" : "incoming-message mr-3 bg-mist text-ink sm:mr-8"}`}>
               <div className="mb-1 flex items-center gap-2 text-xs opacity-70">
                 <p className="min-w-0 flex-1 truncate">{m.fromMe ? "You" : m.from} · {new Date(m.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
                 <button type="button" onClick={() => void updateMail(m.starred ? "unstar" : "star", m.id)} disabled={busy !== ""} aria-label={`${m.starred ? "Remove star from" : "Star"} message`} className={`icon-action h-7 w-7 ${m.starred ? "text-amber-500" : ""}`}><StarIcon className="h-4 w-4" /></button>

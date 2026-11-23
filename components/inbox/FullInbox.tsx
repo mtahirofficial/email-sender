@@ -131,17 +131,19 @@ export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { acc
           <input
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
+            disabled={loading}
             placeholder="Search this inbox, for example: from:ann or price"
             aria-label="Search this inbox"
             maxLength={200}
             className="input min-w-0 flex-1"
           />
-          <button type="submit" className="btn-secondary min-h-[40px] px-3.5 text-sm">
+          <button type="submit" disabled={loading} className="btn-secondary min-h-[40px] px-3.5 text-sm">
             Search
           </button>
           {query && (
             <button
               type="button"
+              disabled={loading}
               onClick={() => {
                 setTyped("");
                 setQuery("");

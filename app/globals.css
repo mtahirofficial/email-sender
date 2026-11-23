@@ -64,6 +64,14 @@ html[data-theme="dark"] .btn-primary:hover {
   color: rgb(var(--accent-deep));
 }
 
+.outgoing-message::selection,
+.outgoing-message *::selection,
+.incoming-message::selection,
+.incoming-message *::selection {
+  background-color: rgb(var(--accent-fill));
+  color: #fff;
+}
+
 /* Visible keyboard focus everywhere, no exceptions. */
 :focus-visible {
   outline: 2px solid #6D5CE8;

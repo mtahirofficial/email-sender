@@ -192,6 +192,9 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
   }, [initialUser]);
 
   const user = initialUser !== undefined ? initialUser : fetched; // undefined = still deciding
+  // The mobile drawer always opens in its labeled, full-width layout, even if
+  // the desktop sidebar preference is collapsed.
+  const sidebarCollapsed = collapsed && !mobileOpen;
 
   const isWorkspacePath = MEMBER_LINKS.some((item) => item.href.split("#")[0] !== "/blog" && pathname === item.href.split("#")[0])
     || pathname === "/profile"
@@ -212,31 +215,33 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
     return (
       <>
         {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-40 bg-ink/30 md:hidden" onClick={() => setMobileOpen(false)} />}
-        <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-r border-line bg-white px-3 py-5 transition-[width,transform] duration-200 ${collapsed ? "app-sidebar-collapsed" : ""} ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-          <Link href="/" className={`mb-4 flex h-10 shrink-0 items-center gap-3 px-2 ${collapsed ? "mb-8 justify-center" : ""}`} aria-label="Outbox home">
-            <Logo className={`shrink-0 ${collapsed ? "h-6 w-8" : "h-9 w-20"}`} />
-            {!collapsed && <span className="font-brand text-2xl font-semibold tracking-wide text-ink">Outbox</span>}
+        <aside className={`app-sidebar fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden border-r border-line bg-white px-3 py-5 transition-[width,transform] duration-200 ${sidebarCollapsed ? "app-sidebar-collapsed" : ""} ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+          <Link href="/" className={`mb-4 flex h-10 shrink-0 items-center gap-3 px-2 ${sidebarCollapsed ? "mb-8 justify-center" : ""}`} aria-label="Outbox home">
+            <Logo className={`shrink-0 ${sidebarCollapsed ? "h-6 w-8" : "h-9 w-20"}`} />
+            {!sidebarCollapsed && <span className="font-brand text-2xl font-semibold tracking-wide text-ink">Outbox</span>}
           </Link>
-          {!collapsed && <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-soft/70">Workspace</p>}
-          <nav aria-label="Workspace" className="flex-none space-y-1">
+          {!sidebarCollapsed && <p className="mb-2 shrink-0 px-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-soft/70">Workspace</p>}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <nav aria-label="Workspace" className="space-y-1">
             {MEMBER_LINKS.map(({ href, label, Icon }) => (
-              <Link key={href} href={href} aria-current={linkClass(href).includes("bg-accent-soft") ? "page" : undefined} title={collapsed ? label : undefined} onClick={() => setMobileOpen(false)} className={`${linkClass(href)} ${collapsed ? "justify-center px-0" : ""}`}>
+              <Link key={href} href={href} aria-current={linkClass(href).includes("bg-accent-soft") ? "page" : undefined} title={sidebarCollapsed ? label : undefined} onClick={() => setMobileOpen(false)} className={`${linkClass(href)} ${sidebarCollapsed ? "justify-center px-0" : ""}`}>
                 <Icon className="h-[18px] w-[18px] shrink-0" />
-                {!collapsed && <span>{label}</span>}
+                {!sidebarCollapsed && <span>{label}</span>}
               </Link>
             ))}
-          </nav>
-          <div className="mt-auto border-t border-line pt-4">
-            <ThemeToggle collapsed={collapsed} />
+            </nav>
+          </div>
+          <div className="mt-auto shrink-0 border-t border-line pt-4">
+            <ThemeToggle collapsed={sidebarCollapsed} />
             {user ? (
-              <Link href="/profile" title={collapsed ? "Profile" : undefined} className={`${linkClass("/profile")} ${collapsed ? "justify-center px-0" : ""}`}>
+              <Link href="/profile" title={sidebarCollapsed ? "Profile" : undefined} className={`${linkClass("/profile")} ${sidebarCollapsed ? "justify-center px-0" : ""}`}>
                 <UserIcon className="h-[18px] w-[18px] shrink-0" />
-                {!collapsed && <span className="min-w-0 truncate">{user.name ?? user.email}</span>}
+                {!sidebarCollapsed && <span className="min-w-0 truncate">{user.name ?? user.email}</span>}
               </Link>
             ) : (
-              <div aria-hidden="true" className={`flex min-h-11 items-center gap-3 px-3 ${collapsed ? "justify-center px-0" : ""}`}>
+              <div aria-hidden="true" className={`flex min-h-11 items-center gap-3 px-3 ${sidebarCollapsed ? "justify-center px-0" : ""}`}>
                 <span className="h-7 w-7 shrink-0 animate-pulse rounded-full bg-line" />
-                {!collapsed && <span className="h-3 w-28 animate-pulse rounded bg-line" />}
+                {!sidebarCollapsed && <span className="h-3 w-28 animate-pulse rounded bg-line" />}
               </div>
             )}
           </div>
