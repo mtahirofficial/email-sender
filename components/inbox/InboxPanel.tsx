@@ -244,6 +244,10 @@ export default function InboxPanel() {
 
   const accounts = data?.accounts ?? [];
   const selected = accounts.find((a) => a.id === accountId) ?? accounts.find((a) => a.provider === "google" && a.inbox_enabled) ?? accounts[0] ?? null;
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("outbox:page-title", { detail: selected ? `Inbox: ${selected.email}` : null }));
+    return () => { window.dispatchEvent(new CustomEvent("outbox:page-title", { detail: null })); };
+  }, [selected?.email]);
   const items = (data?.items ?? []).filter((i) => i.account_id === selected?.id); // this mailbox only
   const counts = Object.fromEntries(TABS.map((t) => [t.key, items.filter((i) => inTab(i, t.key)).length])) as Record<Tab, number>;
   const scheduledFollowUpCount = items.filter((item) => item.followUpDue && (item.followUpSending || Boolean(item.followUpScheduledAt))).length;

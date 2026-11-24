@@ -159,6 +159,7 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [hash, setHash] = useState("");
+  const [pageTitleOverride, setPageTitleOverride] = useState<string | null>(null);
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem("outbox:sidebar-collapsed") === "1");
@@ -167,6 +168,19 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
     window.addEventListener("hashchange", updateHash);
     return () => window.removeEventListener("hashchange", updateHash);
   }, []);
+
+  useEffect(() => {
+    const onPageTitle = (event: Event) => {
+      const title = (event as CustomEvent<string | null>).detail;
+      setPageTitleOverride(typeof title === "string" ? title : null);
+    };
+    window.addEventListener("outbox:page-title", onPageTitle);
+    return () => window.removeEventListener("outbox:page-title", onPageTitle);
+  }, []);
+
+  useEffect(() => {
+    setPageTitleOverride(null);
+  }, [pathname]);
 
   function toggleSidebar() {
     setCollapsed((value) => {
@@ -203,9 +217,10 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
     || pathname === "/verify";
 
   if (user || isWorkspacePath) {
-    const pageTitle = MEMBER_LINKS.find((item) => item.href.split("#")[0] === pathname && (!item.href.includes("#") || hash === item.href.slice(item.href.indexOf("#"))))?.label
+    const defaultPageTitle = MEMBER_LINKS.find((item) => item.href.split("#")[0] === pathname && (!item.href.includes("#") || hash === item.href.slice(item.href.indexOf("#"))))?.label
       ?? MEMBER_LINKS.find((item) => item.href === pathname)?.label
       ?? (pathname.startsWith("/admin") ? "Admin workspace" : "Outbox");
+    const pageTitle = pageTitleOverride ?? defaultPageTitle;
     const linkClass = (href: string) => {
       const [path, anchor] = href.split("#");
       const active = (pathname === path || (path === "/blog" && pathname.startsWith("/blog/"))) && (!anchor || hash === `#${anchor}` || (pathname === "/settings" && hash === "" && anchor === "accounts"));
@@ -252,7 +267,7 @@ export default function SiteHeader({ initialUser }: { initialUser?: HeaderUser |
             <button type="button" onClick={() => { if (window.innerWidth < 768) setMobileOpen(true); else toggleSidebar(); }} className="icon-action h-10 w-10" aria-label={collapsed ? "Expand sidebar or open navigation" : "Collapse sidebar or open navigation"}>
               <MenuIcon className="h-5 w-5" />
             </button>
-            <span className="max-w-[calc(50vw-5rem)] truncate text-sm font-semibold text-ink md:max-w-none">{pageTitle}</span>
+            <span className="max-w-[calc(100vw-10rem)] truncate text-sm font-semibold text-ink md:max-w-[32rem]">{pageTitle}</span>
           </div>
           {!mobileOpen && <Link href="/dashboard" aria-label="Outbox home" className="absolute left-1/2 -translate-x-1/2 md:hidden">
             <Logo className="h-7 w-10 shrink-0" />
