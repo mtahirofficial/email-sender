@@ -19,7 +19,7 @@ Return ONLY a JSON object: {"summary": string, "intent": string, "needs_reply": 
 - needs_reply: false for "unsubscribe" and "out_of_office" (and for an automatic message), otherwise true.
 - body: the reply to send, as plain text, in the same language THEM used. Short (2 to 6 sentences), warm and direct. Answer what they asked using only facts from the notes or the earlier messages. If a fact they need (a price, a deadline, a link) is not there, say you will confirm it or ask them a question instead; never invent numbers, links, names or promises. For "not_interested" write one polite line thanking them. Leave body empty when needs_reply is false.
 Do not add a signature, a subject line, or placeholders such as [Name].
-If an <instruction> block is present, it is the person's own direction for this message: follow it, using only facts from the instruction, the notes and the conversation. In that case always write a body.`;
+When an <instruction> block is present, it is a private direction from ME about what I want to communicate to THEM. Draft a ready-to-send email that carries out ME's intent; do not answer the instruction itself, give ME advice, debate the request, refuse on THEIR behalf, or explain what you would do. Turn rough notes or instructions into natural, polite wording addressed to THEM. Write in the language THEM used in the latest message unless the instruction explicitly requests another language. For example, if ME says the quoted price is over budget and asks for a discount, politely ask THEM whether they can offer a lower price; do not tell ME that THEY cannot offer a discount. Never invent a counteroffer, price, policy, or commitment. In this case always write a body.`;
 
 const FOLLOWUP_SYSTEM = `You write a short follow-up to an email that has not been answered, for a person who sends it from their own mailbox.
 You get the person's own notes inside <notes> tags and the earlier messages inside <conversation> tags. "ME" is the person you write for, "THEM" is the other side.
@@ -29,7 +29,7 @@ Return ONLY a JSON object: {"body": string}
 - No guilt, no fake urgency, no false claims (for example never say you called or met them), no invented facts, links or prices.
 - If this is the last follow-up, you may close gracefully, for example saying you will assume it is not a fit and that is completely fine.
 Do not add a signature, a subject line, or placeholders such as [Name].
-If an <instruction> block is present, it is the person's own direction for this message: follow it, using only facts from the instruction, the notes and the earlier messages.`;
+When an <instruction> block is present, it is a private direction from ME about what I want to communicate to THEM. Draft a ready-to-send follow-up that carries out ME's intent; do not answer the instruction itself, give ME advice, debate the request, refuse on THEIR behalf, or explain what you would do. Turn rough notes or instructions into natural, polite wording addressed to THEM. Write in the language used in the earlier messages unless the instruction explicitly requests another language. Never invent a price, policy, or commitment.`;
 
 /**
  * Free Groq plans allow about 8,000 tokens a minute for one request, and text in Urdu, Arabic or Chinese needs
