@@ -319,7 +319,9 @@ export default function InboxPanel() {
     );
   }
 
-  const opened = items.find((i) => i.id === openId) ?? null;
+  // Keep an opened conversation mounted even when a successful reply moves it
+  // out of the current tab (for example, Replies -> Done).
+  const opened = data?.items.find((i) => i.id === openId && i.account_id === selected?.id) ?? null;
   const problems = syncProblems.filter((p) => p.email === selected?.email);
   const canRead = Boolean(selected && selected.provider === "google" && selected.inbox_enabled);
 
@@ -509,7 +511,7 @@ export default function InboxPanel() {
       </div>
 
       {mailOpen && (
-        <Conversation key={mailOpen.id} item={mailOpen} onDraft={() => { }} onClose={() => setMailOpen(null)} onChanged={async () => { setFullInboxRefreshToken((token) => token + 1); }} next={() => setMailOpen(null)} />
+        <Conversation key={mailOpen.id} item={mailOpen} onDraft={() => { }} onClose={() => setMailOpen(null)} onChanged={async () => { setFullInboxRefreshToken((token) => token + 1); }} />
       )}
 
       {opened && (
@@ -522,10 +524,6 @@ export default function InboxPanel() {
           onChanged={async (sent) => {
             if (sent) setDrafts((m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== opened.id)));
             await load();
-          }}
-          next={() => {
-            const rest = list.filter((i) => i.id !== opened.id && drafts[i.id]);
-            setOpenId(rest[0]?.id ?? null);
           }}
         />
       )}
@@ -572,14 +570,12 @@ function Conversation({
   onDraft,
   onClose,
   onChanged,
-  next,
 }: {
   item: Item;
   draft?: Draft;
   onDraft: (d: Draft) => void;
   onClose: () => void;
   onChanged: (sent: boolean) => Promise<void>;
-  next: () => void;
 }) {
   const toast = useToast();
   useScrollLock(); // the page behind the conversation does not scroll while it is open
@@ -677,8 +673,18 @@ function Conversation({
       const r = await post<{ sentTo: string }>("/api/inbox/send", { ...target, kind, body: text });
       if (kind === "reply") setMessages((current) => current?.map((message) => ({ ...message, unread: false })) ?? null);
       toast.success(`Sent to ${r.sentTo}.`);
+      setText("");
+      setShowDraftInfo(false);
+      onDraft({ body: "" });
+      setBusy("");
+      try {
+        const refreshed = await call<{ messages: Message[]; threadId: string }>(`/api/inbox/thread?${new URLSearchParams(target)}`);
+        setMessages(refreshed.messages);
+        setThreadId(refreshed.threadId);
+      } catch {
+        // Sending has already succeeded; keep the conversation open if refresh is delayed.
+      }
       await onChanged(true);
-      next();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send.");
       setBusy("");
