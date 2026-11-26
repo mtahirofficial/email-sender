@@ -1,3 +1,5 @@
+import { fetchGmailApi } from "@/lib/gmail-quota";
+
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
@@ -173,14 +175,14 @@ export async function sendGmail(
     opts.body,
   ].join("\r\n");
 
-  const res = await fetch(GMAIL_SEND_URL, {
+  const res = await fetchGmailApi(accessToken, GMAIL_SEND_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ raw: toBase64Url(mime), ...(opts.threadId ? { threadId: opts.threadId } : {}) }),
-  });
+  }, "/messages/send");
 
   if (!res.ok) {
     const text = await res.text();

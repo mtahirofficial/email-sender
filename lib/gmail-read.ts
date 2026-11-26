@@ -1,4 +1,5 @@
 import { GoogleModifyScopeError, GoogleReadScopeError } from "@/lib/google";
+import { fetchGmailApi } from "@/lib/gmail-quota";
 
 // Reads replies from Gmail. Only used when the person turned on the Inbox for that account.
 // Message text is read on demand and never stored by Outbox.
@@ -16,15 +17,10 @@ export class GmailApiError extends Error {
 }
 
 async function gmailGet(accessToken: string, path: string, retried = false): Promise<any> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchGmailApi(accessToken, `${API}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (res.status === 429 && !retried) {
-    await new Promise((resolve) => setTimeout(resolve, 1200)); // Gmail's per-second limit: wait a moment, then try once more
-    return gmailGet(accessToken, path, true);
-  }
+  }, path);
   // Gmail may answer an empty search with 204. Treat it as an empty collection,
   // so the inbox can show its normal "no matches" state instead of a server error.
   if (res.status === 204) return { messages: [] };
@@ -162,6 +158,35 @@ function splitQuotedHtml(html: string): { text: string; quotedText?: string } {
 
 function splitQuotedPlain(text: string): { text: string; quotedText?: string } {
   const normalized = text.replace(/\r\n?/g, "\n").trim();
+
+  // Some CRM systems (including IEEE's support center) append their complete
+  // ticket history as plain text, separated by headings and horizontal rules
+  // instead of Gmail's usual quote markup. Keep the current response visible
+  // and place the appended history behind the existing three-dot toggle.
+  const subjectSection = /\nSubject\s*\n\s*-{3,}\s*\n/i.exec(normalized);
+  const discussionSection = /\nDiscussion Thread\s*\n\s*-{3,}\s*\n/i.exec(normalized);
+  if (subjectSection && /^Response\s*(?:\n|$)/i.test(normalized)) {
+    const current = normalized.slice(0, subjectSection.index).trim();
+    const quoted = normalized.slice(subjectSection.index + 1).trim();
+    return { text: current, ...(quoted ? { quotedText: quoted } : {}) };
+  }
+  if (discussionSection) {
+    const discussionStart = discussionSection.index + discussionSection[0].length;
+    const replyMarker = /(?:^|\n)Response By Email\s*\([^\n]*\)\s*\([^\n]*\)\s*/i.exec(normalized.slice(discussionStart));
+    if (replyMarker) {
+      const replyStart = discussionStart + replyMarker.index + replyMarker[0].length;
+      const remaining = normalized.slice(replyStart);
+      const oldCustomerMessage = /\nCustomer By\s[^\n]*\n/i.exec(remaining);
+      const oldAgentMessage = /\nResponse By Email\s\([^\n]*\)\s\([^\n]*\)\s/i.exec(remaining);
+      const quoteStart = [oldCustomerMessage?.index, oldAgentMessage?.index]
+        .filter((index): index is number => index !== undefined && index > 0)
+        .sort((a, b) => a - b)[0];
+      const current = (quoteStart === undefined ? remaining : remaining.slice(0, quoteStart)).trim();
+      const quoted = normalized.slice(0, replyStart).trim();
+      if (current) return { text: current, quotedText: quoted };
+    }
+  }
+
   const attribution = /^\s*(?:On\s+[^\n]{5,500}?wrote:?|(?:Le|Am|El|Il|Op)\s+[^\n]{5,500}?(?:schrieb|wrote|a écrit|escribió|ha scritto|schreef):?)\s*$/im.exec(normalized);
   if (!attribution) return { text: stripQuoted(normalized) };
   const before = normalized.slice(0, attribution.index).trim();
@@ -234,8 +259,6 @@ export function stripQuoted(text: string, maxChars = 2500): string {
     /^\s*-{2,}\s*(?:Original Message|Forwarded message)\s*-{2,}\s*$/im,
     /^\s*Begin forwarded message:\s*$/im,
     /^\s*From:\s.+\n(?:Sent|Date|To|Subject):\s/im, // Outlook style header block
-    /^\s*(?:_{5,}|-{5,})\s*$/m,
-    /^\s*_{5,}\s*$/m,
   ];
   let firstCut = -1;
   for (const re of cuts) {
@@ -407,18 +430,13 @@ export async function listInboxPage(accessToken: string, opts: { pageToken?: str
 }
 
 /** Gmail's modify scope is required to update labels on a thread or message. */
-async function gmailModify(accessToken: string, path: string, body: { addLabelIds?: string[]; removeLabelIds?: string[] }, retried = false) {
-  const res = await fetch(`${API}${path}`, {
+async function gmailModify(accessToken: string, path: string, body: { addLabelIds?: string[]; removeLabelIds?: string[] }) {
+  const res = await fetchGmailApi(accessToken, `${API}${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (res.status === 429 && !retried) {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    return gmailModify(accessToken, path, body, true);
-  }
+  }, path);
   if (!res.ok) {
     const text = await res.text();
     if (res.status === 403 && /ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficientPermissions|insufficient authentication scopes/i.test(text)) {

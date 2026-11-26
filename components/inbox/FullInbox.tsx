@@ -27,11 +27,15 @@ export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { acc
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isGmailBusy, setIsGmailBusy] = useState(false);
+  const [gmailRetryAt, setGmailRetryAt] = useState<number | null>(null);
+  const [gmailRetrySeconds, setGmailRetrySeconds] = useState(0);
   const [needsPermission, setNeedsPermission] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [query, setQuery] = useState("");
   const lastRefreshToken = useRef(refreshToken);
+  const gmailRetryTriggered = useRef(false);
 
   const load = useCallback(
     async (token: string, q: string) => {
@@ -42,20 +46,54 @@ export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { acc
         if (q) params.set("q", q);
         const res = await fetch(`/api/inbox/mail?${params}`, { cache: "no-store" });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw Object.assign(new Error(typeof data.error === "string" ? data.error : "Could not load the inbox."), { needsPermission: Boolean(data.needsPermission) });
+        if (!res.ok) throw Object.assign(new Error(typeof data.error === "string" ? data.error : "Could not load the inbox."), {
+          needsPermission: Boolean(data.needsPermission),
+          gmailBusy: Boolean(data.gmailBusy),
+          retryAfterSeconds: Number(data.retryAfterSeconds) || 0,
+        });
         setItems(data.items as MailItem[]);
         setNext((data.nextPageToken as string | null) ?? null);
         setError(null);
+        setIsGmailBusy(false);
+        setGmailRetryAt(null);
+        setGmailRetrySeconds(0);
         setNeedsPermission(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not load the inbox.");
         setNeedsPermission(Boolean((err as { needsPermission?: boolean }).needsPermission));
+        const rateLimit = err as { gmailBusy?: boolean; retryAfterSeconds?: number };
+        if (rateLimit.gmailBusy && rateLimit.retryAfterSeconds) {
+          setIsGmailBusy(true);
+          gmailRetryTriggered.current = false;
+          setGmailRetrySeconds(rateLimit.retryAfterSeconds);
+          setGmailRetryAt(Date.now() + rateLimit.retryAfterSeconds * 1000);
+        } else {
+          setIsGmailBusy(false);
+          setGmailRetryAt(null);
+          setGmailRetrySeconds(0);
+        }
       } finally {
         setLoading(false);
       }
     },
     [accountId]
   );
+
+  useEffect(() => {
+    if (gmailRetryAt === null) return;
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((gmailRetryAt - Date.now()) / 1000));
+      setGmailRetrySeconds(remaining);
+      if (remaining === 0 && !gmailRetryTriggered.current) {
+        gmailRetryTriggered.current = true;
+        setGmailRetryAt(null);
+        void load(tokens[page] ?? "", query);
+      }
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 250);
+    return () => clearInterval(timer);
+  }, [gmailRetryAt, load, page, query, tokens]);
 
   // a different mailbox or a new search starts again from the first page
   useEffect(() => {
@@ -157,7 +195,17 @@ export default function FullInbox({ accountId, onOpen, refreshToken = 0 }: { acc
         {pager}
       </div>
 
-      {error && (
+      {error && isGmailBusy ? (
+        <div role="status" aria-live="polite" className="mt-3 flex items-center gap-2 rounded-lg border border-amber/30 bg-amber-soft px-3.5 py-2.5 text-sm text-amber">
+          <AlertIcon className="h-4 w-4 shrink-0" />
+          <p className="min-w-0 flex-1">{error}</p>
+          {gmailRetryAt !== null ? (
+            <span className="shrink-0 rounded-md bg-surface/70 px-2 py-1 font-mono text-xs font-semibold tabular-nums" aria-label={`${gmailRetrySeconds} seconds remaining`}>
+              {String(Math.floor(gmailRetrySeconds / 60)).padStart(2, "0")}:{String(gmailRetrySeconds % 60).padStart(2, "0")}
+            </span>
+          ) : <span className="shrink-0 text-xs font-semibold">Retrying…</span>}
+        </div>
+      ) : error && (
         <p role="alert" className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800">
           <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" /> {error}
         </p>
